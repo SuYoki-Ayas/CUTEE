@@ -12,6 +12,7 @@ find_package(Qt6 6.2 REQUIRED COMPONENTS
     Core
     Gui
     Widgets
+    Sql
 )
 
 # 启用 Qt 代码自动处理
@@ -37,6 +38,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
+    Qt6::Sql
 )
 
 # 在文件末尾添加
