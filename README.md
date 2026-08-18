@@ -1,5 +1,7 @@
 # Project CUTEE
 
+**此项目暂时仍处于开发状态**
+
 为了 学生和Oier 而生的基于 Qt6 的Toolkit
 
 需要 Qt 6.11 或更高版本。
@@ -63,14 +65,22 @@
 <details>
 <summary>版权信息</summary>
 
-- 版权所有 2026 Project CUTEE.
+- Copyright (c) 2026 Project CUTEE.
 
-- 此程序是自由软件：您可以根据自由软件基金会发布的 GNU 通用公共许可证的条款重新分发和/或修改它。
+- 此项目的 **源代码** 的版权归 Project CUTEE 所有。您可以在遵守 **GPL-3.0-only** 的前提下自由使用、修改和分发本项目的 **源代码**。
 
-- 此程序**在 GPL-3.0-only 下发布**。
+- CUTEE 的 **图标、用户文档和 LOGO** 的版权归 Project CUTEE 所有。您可以在遵守 **CC-BY-SA 4.0** 的前提下自由使用、修改和分发本项目的 **图标、用户文档和 LOGO**。
 
-- 此程序的发布是为了希望它能有用，但不作任何担保；甚至不作关于适销性或适合特定用途的默示保证。有关更多详细信息，请参阅 GNU 通用公共许可证。
+- 此程序是自由软件：您可以根据自由软件基金会发布的 **GNU 通用公共许可证** 的条款重新分发和/或修改它。
 
-- 您应该已收到与此程序一起提供的 GNU 通用公共许可证副本。如果不是，请参阅[此处](https://gnu.net.cn/licenses/)。
+- 此程序的发布是为了希望它能有用，但不作任何担保；甚至不作关于适销性或适合特定用途的默示保证。有关更多详细信息，请参阅 **GNU 通用公共许可证**。
+
+- 您应该已收到与此程序一起提供的 **GNU 通用公共许可证副本**。如果不是，请参阅[**此处**](https://gnu.net.cn/licenses/)。
+
+- 更多有关 **CC-BY-SA 4.0** 的信息，请参阅[**此处**](https://creativecommons.org/licenses/by-sa/4.0/)。
+
 </details>
 
+<img src="https://cdn.luogu.com.cn/upload/image_hosting/5nmm6zih.png" width="120px" class="aligncenter"><br>
+
+<img src="https://cdn.luogu.com.cn/upload/image_hosting/e23zyszt.png" width="120px" class="aligncenter">
