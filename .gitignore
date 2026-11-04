@@ -1,0 +1,19 @@
+# Build trees
+/build/
+/build-*/
+/out/
+/deploy/
+/installer/Output/
+
+# CMake user-local presets may contain machine specific paths
+CMakeUserPresets.json
+
+# IDE and editor state
+.vs/
+.idea/
+.vscode/
+*.user
+*.user.*
+
+# Logs and local data
+*.log
