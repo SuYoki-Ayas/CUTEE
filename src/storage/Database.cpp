@@ -4,6 +4,7 @@
 #include "storage/DbUtils.h"
 #include "storage/Migrations.h"
 
+#include <QDebug>
 #include <QDir>
 #include <QFileInfo>
 #include <QSqlError>
@@ -56,7 +57,11 @@ Result<void> Database::open(const QString &filePath)
         }
     }
 
-    qInfo().noquote() << QStringLiteral("数据库已打开：%1").arg(QDir::toNativeSeparators(filePath));
+    if (m_connectionName == QStringLiteral("cutee_main"))
+        qInfo().noquote() << QStringLiteral("数据库已打开：%1").arg(QDir::toNativeSeparators(filePath));
+    else
+        qDebug().noquote() << QStringLiteral("工作线程数据库已打开：%1")
+                                  .arg(QDir::toNativeSeparators(filePath));
     return {};
 }
 

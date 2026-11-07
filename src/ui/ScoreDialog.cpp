@@ -1,6 +1,7 @@
 #include "ui/ScoreDialog.h"
 
 #include "core/ScoreValue.h"
+#include "ui/UiKit.h"
 
 #include <QComboBox>
 #include <QDateEdit>
@@ -42,8 +43,12 @@ ScoreDialog::ScoreDialog(const ExamRecord *existing, const QVector<Subject> &sub
         m_record = *existing;
 
     auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(20, 20, 20, 16);
+    layout->setSpacing(14);
     auto *form = new QFormLayout();
     form->setSpacing(10);
+    form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
 
     m_type = new QComboBox(this);
     m_type->addItem(examTypeDisplayName(ExamType::Oi), static_cast<int>(ExamType::Oi));
@@ -91,17 +96,20 @@ ScoreDialog::ScoreDialog(const ExamRecord *existing, const QVector<Subject> &sub
     form->addRow(QStringLiteral("参考人数"), m_participants);
     form->addRow(QStringLiteral("备注"), m_note);
 
-    auto *hint = new QLabel(
+    auto *hint = ui::makeHintLabel(
         QStringLiteral("得分与满分按两位小数精确保存；得分可以高于满分，但保存前会再次确认。"), this);
-    hint->setWordWrap(true);
-    hint->setStyleSheet(QStringLiteral("color: #667085;"));
     form->addRow(QString(), hint);
 
     layout->addLayout(form);
 
+    m_error = ui::makeErrorLabel(this);
+    m_error->setVisible(false);
+    layout->addWidget(m_error);
+
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, this);
     buttons->button(QDialogButtonBox::Save)->setText(QStringLiteral("保存"));
     buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("取消"));
+    ui::applyRole(buttons->button(QDialogButtonBox::Save), "primary");
     layout->addWidget(buttons);
 
     connect(buttons, &QDialogButtonBox::accepted, this, &ScoreDialog::accept);
@@ -109,7 +117,16 @@ ScoreDialog::ScoreDialog(const ExamRecord *existing, const QVector<Subject> &sub
     connect(m_type, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &ScoreDialog::refreshSubjects);
 
+    connect(m_title, &QLineEdit::textEdited, this, [this] { refreshValidation(true); });
+    connect(m_score, &QLineEdit::textEdited, this, [this] { refreshValidation(true); });
+    connect(m_fullScore, &QLineEdit::textEdited, this, [this] { refreshValidation(true); });
+    connect(m_type, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this] { refreshValidation(true); });
+    connect(m_subject, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this] { refreshValidation(true); });
+
     refreshSubjects();
+    refreshValidation(false);
     m_title->setFocus();
 }
 
@@ -141,42 +158,94 @@ void ScoreDialog::refreshSubjects()
         m_subject->setCurrentIndex(index);
 }
 
-void ScoreDialog::accept()
+void ScoreDialog::refreshValidation(bool showErrors)
 {
-    const qint64 subjectId = m_subject->currentData().isValid()
-        ? m_subject->currentData().toLongLong()
-        : 0;
-    if (subjectId <= 0) {
-        QMessageBox::warning(this, QStringLiteral("信息不完整"),
-                             QStringLiteral("请选择一个可用的科目。"));
+    if (!showErrors) {
+        markInvalid(m_subject, false);
+        markInvalid(m_title, false);
+        markInvalid(m_score, false);
+        markInvalid(m_fullScore, false);
+        m_error->clear();
+        m_error->setVisible(false);
         return;
     }
-    if (m_title->text().trimmed().isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("信息不完整"),
-                             QStringLiteral("考试名称不能为空。"));
-        m_title->setFocus();
+
+    const QString message = validationMessage();
+    markInvalid(m_subject,
+                !m_subject->currentData().isValid() || m_subject->currentData().toLongLong() <= 0);
+    markInvalid(m_title, m_title->text().trimmed().isEmpty());
+    markInvalid(m_score, !scoreutil::parsePoints(m_score->text()));
+    const auto fullScore = scoreutil::parsePoints(m_fullScore->text());
+    markInvalid(m_fullScore, !fullScore || *fullScore <= 0);
+
+    if (!message.isEmpty()) {
+        ui::applyRole(m_error, "error");
+        m_error->setText(message);
+        m_error->setVisible(true);
         return;
     }
 
     const auto score = scoreutil::parsePoints(m_score->text());
+    if (score && fullScore && *fullScore > 0 && *score > *fullScore) {
+        ui::applyRole(m_error, "warning");
+        m_error->setText(QStringLiteral("得分高于满分，保存时会再次确认。"));
+        m_error->setVisible(true);
+        return;
+    }
+
+    m_error->clear();
+    m_error->setVisible(false);
+}
+
+QString ScoreDialog::validationMessage() const
+{
+    if (!m_subject->currentData().isValid() || m_subject->currentData().toLongLong() <= 0)
+        return QStringLiteral("请选择一个可用的科目。");
+    if (m_title->text().trimmed().isEmpty())
+        return QStringLiteral("考试名称不能为空。");
+    if (!m_date->date().isValid())
+        return QStringLiteral("请选择有效的考试日期。");
+
     const auto fullScore = scoreutil::parsePoints(m_fullScore->text());
-    if (!score) {
-        QMessageBox::warning(this, QStringLiteral("分数无效"),
-                             QStringLiteral("得分必须是不小于 0 的数字，最多两位小数。"));
-        m_score->setFocus();
+    if (!fullScore || *fullScore <= 0)
+        return QStringLiteral("满分必须是大于 0 的数字，最多两位小数。");
+    if (!scoreutil::parsePoints(m_score->text()))
+        return QStringLiteral("得分必须是不小于 0 的数字，最多两位小数。");
+    return {};
+}
+
+void ScoreDialog::markInvalid(QWidget *field, bool invalid)
+{
+    if (invalid)
+        ui::applyRole(field, "invalid");
+    else
+        ui::clearRole(field);
+}
+
+void ScoreDialog::accept()
+{
+    refreshValidation(true);
+    if (!validationMessage().isEmpty()) {
+        if (!m_subject->currentData().isValid() || m_subject->currentData().toLongLong() <= 0)
+            m_subject->setFocus();
+        else if (m_title->text().trimmed().isEmpty())
+            m_title->setFocus();
+        else if (!scoreutil::parsePoints(m_fullScore->text()))
+            m_fullScore->setFocus();
+        else
+            m_score->setFocus();
         return;
     }
-    if (!fullScore || *fullScore <= 0) {
-        QMessageBox::warning(this, QStringLiteral("分数无效"),
-                             QStringLiteral("满分必须是大于 0 的数字，最多两位小数。"));
-        m_fullScore->setFocus();
-        return;
-    }
-    if (*score > *fullScore) {
+
+    const qint64 subjectId = m_subject->currentData().toLongLong();
+    const qint64 score = *scoreutil::parsePoints(m_score->text());
+    const qint64 fullScore = *scoreutil::parsePoints(m_fullScore->text());
+
+    if (score > fullScore) {
         const auto answer = QMessageBox::warning(
             this, QStringLiteral("得分高于满分"),
             QStringLiteral("得分 %1 高于满分 %2。\n\n确定要按此内容保存吗？")
-                .arg(scoreutil::formatPoints(*score), scoreutil::formatPoints(*fullScore)),
+                .arg(scoreutil::formatPoints(score), scoreutil::formatPoints(fullScore)),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
         if (answer != QMessageBox::Yes)
             return;
@@ -193,8 +262,8 @@ void ScoreDialog::accept()
     }
     m_record.title = m_title->text().trimmed();
     m_record.examDate = m_date->date();
-    m_record.scoreHundredths = *score;
-    m_record.fullScoreHundredths = *fullScore;
+    m_record.scoreHundredths = score;
+    m_record.fullScoreHundredths = fullScore;
     m_record.rank = m_rank->value() > 0 ? std::optional<int>(m_rank->value()) : std::nullopt;
     m_record.participants = m_participants->value() > 0
         ? std::optional<int>(m_participants->value())

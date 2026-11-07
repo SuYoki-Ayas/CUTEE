@@ -2,6 +2,7 @@
 
 #include "core/AppPaths.h"
 #include "core/Logging.h"
+#include "ui/UiKit.h"
 
 #include <QCheckBox>
 #include <QDesktopServices>
@@ -23,30 +24,21 @@ namespace cutee {
 LogPage::LogPage(QWidget *parent)
     : QWidget(parent)
 {
-    auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(28, 24, 28, 24);
-    layout->setSpacing(12);
+    auto *layout = ui::makePageLayout(this);
 
-    auto *title = new QLabel(QStringLiteral("日志"), this);
-    QFont titleFont = title->font();
-    titleFont.setPointSize(titleFont.pointSize() + 6);
-    titleFont.setBold(true);
-    title->setFont(titleFont);
-    layout->addWidget(title);
+    layout->addWidget(ui::makePageTitle(QStringLiteral("日志"), this));
 
-    auto *toolbar = new QWidget(this);
-    auto *toolbarLayout = new QHBoxLayout(toolbar);
-    toolbarLayout->setContentsMargins(0, 0, 0, 0);
-    toolbarLayout->setSpacing(10);
+    QHBoxLayout *toolbarLayout = nullptr;
+    QWidget *toolbar = ui::makeFilterBar(this, &toolbarLayout);
 
-    auto *refreshButton = new QPushButton(QStringLiteral("刷新"), toolbar);
+    auto *refreshButton = ui::makeButton(QStringLiteral("刷新"), toolbar);
     refreshButton->setAutoDefault(false);
-    auto *openButton = new QPushButton(QStringLiteral("打开日志目录"), toolbar);
+    auto *openButton = ui::makeButton(QStringLiteral("打开日志目录"), toolbar);
     openButton->setAutoDefault(false);
     m_autoRefresh = new QCheckBox(QStringLiteral("自动刷新（2 秒）"), toolbar);
 
     auto *pathLabel = new QLabel(QDir::toNativeSeparators(logging::logFilePath()), toolbar);
-    pathLabel->setStyleSheet(QStringLiteral("color: #667085;"));
+    ui::applyRole(pathLabel, "hint");
 
     toolbarLayout->addWidget(refreshButton);
     toolbarLayout->addWidget(openButton);
@@ -57,6 +49,7 @@ LogPage::LogPage(QWidget *parent)
     layout->addWidget(toolbar);
 
     m_view = new QPlainTextEdit(this);
+    m_view->setObjectName(QStringLiteral("logView"));
     m_view->setReadOnly(true);
     m_view->setLineWrapMode(QPlainTextEdit::NoWrap);
     m_view->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));

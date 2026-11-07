@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QHash>
 #include <QVector>
 #include <QWidget>
 
@@ -48,6 +49,7 @@ private:
     QPushButton *m_downButton = nullptr;
 
     QVector<Subject> m_subjects;
+    QHash<qint64, int> m_referenceCounts;
 };
 
 } // namespace cutee

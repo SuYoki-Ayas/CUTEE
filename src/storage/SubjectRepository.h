@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QHash>
 #include <QVector>
 
 #include <optional>
@@ -34,6 +35,10 @@ public:
     Result<void> move(qint64 id, int offset);
 
     Result<int> referenceCount(qint64 id) const;
+
+    /// Reference counts for every subject in one query; used by list views so
+    /// loading a page never issues one query per row.
+    Result<QHash<qint64, int>> referenceCounts() const;
     Result<int> nextSortOrder(ExamType type) const;
 
 private:

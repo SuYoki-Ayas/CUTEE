@@ -1,0 +1,9 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/">
+        <file alias="styles/app.qss">styles/app.qss</file>
+        <file alias="icons/chevron-down.svg">icons/chevron-down.svg</file>
+        <file alias="icons/chevron-up.svg">icons/chevron-up.svg</file>
+        <file alias="icons/chevron-down-disabled.svg">icons/chevron-down-disabled.svg</file>
+    </qresource>
+</RCC>

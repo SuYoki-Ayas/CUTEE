@@ -3,6 +3,7 @@
 #include "core/TimeUtils.h"
 #include "storage/Database.h"
 #include "storage/StudentProfileRepository.h"
+#include "ui/UiKit.h"
 
 #include <QFont>
 #include <QFormLayout>
@@ -27,16 +28,9 @@ ProfilePage::ProfilePage(Database &database, QWidget *parent)
     : QWidget(parent)
     , m_repository(database)
 {
-    auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(28, 24, 28, 24);
-    layout->setSpacing(14);
+    auto *layout = ui::makePageLayout(this);
 
-    auto *title = new QLabel(QStringLiteral("学生档案"), this);
-    QFont titleFont = title->font();
-    titleFont.setPointSize(titleFont.pointSize() + 6);
-    titleFont.setBold(true);
-    title->setFont(titleFont);
-    layout->addWidget(title);
+    layout->addWidget(ui::makePageTitle(QStringLiteral("学生档案"), this));
 
     m_banner = new QLabel(this);
     m_banner->setWordWrap(true);
@@ -48,6 +42,9 @@ ProfilePage::ProfilePage(Database &database, QWidget *parent)
     form->setContentsMargins(0, 0, 0, 0);
     form->setSpacing(10);
     form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    form->setRowWrapPolicy(QFormLayout::DontWrapRows);
+    formWidget->setMinimumWidth(420);
 
     m_name = new QLineEdit(formWidget);
     m_name->setPlaceholderText(QStringLiteral("必填，例如：张三"));
@@ -59,31 +56,42 @@ ProfilePage::ProfilePage(Database &database, QWidget *parent)
     m_note->setPlaceholderText(QStringLiteral("可选，例如：竞赛方向、目标院校等"));
     m_note->setFixedHeight(100);
 
+    m_error = ui::makeErrorLabel(formWidget);
+    m_error->setVisible(false);
+
     form->addRow(QStringLiteral("姓名 *"), m_name);
     form->addRow(QStringLiteral("学号 / 准考证号"), m_studentNo);
     form->addRow(QStringLiteral("学校 / 班级"), m_schoolClass);
     form->addRow(QStringLiteral("备注"), m_note);
+    form->addRow(QString(), m_error);
     layout->addWidget(formWidget);
 
     auto *buttons = new QWidget(this);
     auto *buttonLayout = new QHBoxLayout(buttons);
     buttonLayout->setContentsMargins(0, 0, 0, 0);
     buttonLayout->setSpacing(10);
-    m_saveButton = new QPushButton(QStringLiteral("保存档案"), buttons);
+    m_saveButton = ui::makePrimaryButton(QStringLiteral("保存档案"), buttons);
     m_saveButton->setDefault(true);
-    m_resetButton = new QPushButton(QStringLiteral("撤销更改"), buttons);
+    m_resetButton = ui::makeButton(QStringLiteral("撤销更改"), buttons);
     buttonLayout->addWidget(m_saveButton);
     buttonLayout->addWidget(m_resetButton);
+    buttonLayout->addSpacing(12);
+    m_feedback = ui::makeStatusLabel(buttons);
+    buttonLayout->addWidget(m_feedback);
     buttonLayout->addStretch(1);
     layout->addWidget(buttons);
 
-    m_meta = new QLabel(this);
-    m_meta->setStyleSheet(QStringLiteral("color: #667085;"));
+    m_meta = ui::makeStatusLabel(this);
     layout->addWidget(m_meta);
     layout->addStretch(1);
 
     connect(m_saveButton, &QPushButton::clicked, this, &ProfilePage::save);
     connect(m_resetButton, &QPushButton::clicked, this, &ProfilePage::resetForm);
+    connect(m_name, &QLineEdit::textEdited, this, [this] {
+        ui::clearRole(m_name);
+        m_error->setVisible(false);
+        m_feedback->clear();
+    });
 
     reload();
 }
@@ -118,15 +126,15 @@ void ProfilePage::resetForm()
     m_schoolClass->setText(m_loaded.schoolClass);
     m_note->setPlainText(m_loaded.note);
     m_resetButton->setEnabled(m_hasProfile);
+    ui::clearRole(m_name);
+    m_error->setVisible(false);
+    m_feedback->clear();
 }
 
 void ProfilePage::setBanner(bool firstRun)
 {
     m_banner->setText(QString::fromUtf8(firstRun ? kFirstRunBanner : kNormalBanner));
-    m_banner->setStyleSheet(
-        firstRun ? QStringLiteral("background: #eef4ff; color: #1d4ed8; border: 1px solid #bfd3ff;"
-                                  " border-radius: 6px; padding: 10px;")
-                 : QStringLiteral("color: #667085;"));
+    ui::applyRole(m_banner, firstRun ? "banner" : "hint");
     m_saveButton->setText(firstRun ? QStringLiteral("保存档案并开始使用")
                                    : QStringLiteral("保存修改"));
 }
@@ -139,30 +147,28 @@ void ProfilePage::save()
     profile.schoolClass = m_schoolClass->text().trimmed();
     profile.note = m_note->toPlainText().trimmed();
 
+    m_feedback->clear();
     if (profile.name.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("信息不完整"), QStringLiteral("学生姓名不能为空。"));
+        ui::applyRole(m_name, "invalid");
+        m_error->setText(QStringLiteral("学生姓名不能为空。"));
+        m_error->setVisible(true);
         m_name->setFocus();
         return;
     }
-
-    if (m_hasProfile) {
-        const auto answer = QMessageBox::question(
-            this, QStringLiteral("确认保存"),
-            QStringLiteral("确定用当前内容覆盖已有档案吗？"), QMessageBox::Yes | QMessageBox::No,
-            QMessageBox::No);
-        if (answer != QMessageBox::Yes)
-            return;
-    }
+    ui::clearRole(m_name);
+    m_error->setVisible(false);
 
     auto saved = m_repository.save(profile);
     if (!saved) {
-        QMessageBox::warning(this, QStringLiteral("保存失败"), saved.errorMessage());
+        m_error->setText(saved.errorMessage());
+        m_error->setVisible(true);
         return;
     }
 
     reload();
     emit profileSaved();
-    QMessageBox::information(this, QStringLiteral("已保存"), QStringLiteral("学生档案已保存。"));
+    m_feedback->setText(QStringLiteral("已保存"));
+    ui::applyRole(m_feedback, "success");
 }
 
 } // namespace cutee

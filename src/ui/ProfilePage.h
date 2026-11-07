@@ -39,6 +39,8 @@ private:
 
     QLabel *m_banner = nullptr;
     QLabel *m_meta = nullptr;
+    QLabel *m_error = nullptr;
+    QLabel *m_feedback = nullptr;
     QLineEdit *m_name = nullptr;
     QLineEdit *m_studentNo = nullptr;
     QLineEdit *m_schoolClass = nullptr;

@@ -5,6 +5,7 @@
 #include "service/LegacyDataService.h"
 #include "storage/Database.h"
 #include "storage/SettingsRepository.h"
+#include "ui/UiKit.h"
 
 #include <QComboBox>
 #include <QDesktopServices>
@@ -44,15 +45,6 @@ QWidget *readOnlyPathRow(QLineEdit **field, const QString &text, QPushButton **b
     return container;
 }
 
-QLabel *sectionTitle(const QString &text, QWidget *parent)
-{
-    auto *label = new QLabel(text, parent);
-    QFont font = label->font();
-    font.setBold(true);
-    label->setFont(font);
-    return label;
-}
-
 } // namespace
 
 SettingsPage::SettingsPage(Database &database, SettingsRepository &settings, QWidget *parent)
@@ -60,16 +52,9 @@ SettingsPage::SettingsPage(Database &database, SettingsRepository &settings, QWi
     , m_database(database)
     , m_settings(settings)
 {
-    auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(28, 24, 28, 24);
-    layout->setSpacing(16);
+    auto *layout = ui::makePageLayout(this);
 
-    auto *title = new QLabel(QStringLiteral("设置"), this);
-    QFont titleFont = title->font();
-    titleFont.setPointSize(titleFont.pointSize() + 6);
-    titleFont.setBold(true);
-    title->setFont(titleFont);
-    layout->addWidget(title);
+    layout->addWidget(ui::makePageTitle(QStringLiteral("设置"), this));
 
     layout->addWidget(buildForm());
     layout->addWidget(buildLegacySection());
@@ -85,6 +70,7 @@ QWidget *SettingsPage::buildForm()
     formLayout->setContentsMargins(0, 0, 0, 0);
     formLayout->setSpacing(10);
     formLayout->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    formLayout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
 
     QPushButton *openDataButton = nullptr;
     QPushButton *openDatabaseButton = nullptr;
@@ -108,13 +94,11 @@ QWidget *SettingsPage::buildForm()
     m_logLevel->addItem(QStringLiteral("错误（Critical）"), QStringLiteral("critical"));
     formLayout->addRow(QStringLiteral("日志级别"), m_logLevel);
 
-    auto *hint = new QLabel(
+    auto *hint = ui::makeHintLabel(
         QStringLiteral("所有数据保存在本机 SQLite 文件中，不会上传到网络。备份时复制数据目录即可。"
                        "当前数据库 schema 版本：%1。")
             .arg(m_database.schemaVersion()),
         form);
-    hint->setWordWrap(true);
-    hint->setStyleSheet(QStringLiteral("color: #667085;"));
     formLayout->addRow(QString(), hint);
 
     auto *buttons = new QWidget(form);
@@ -122,16 +106,15 @@ QWidget *SettingsPage::buildForm()
     buttonLayout->setContentsMargins(0, 0, 0, 0);
     buttonLayout->setSpacing(10);
 
-    auto *saveButton = new QPushButton(QStringLiteral("保存设置"), buttons);
+    auto *saveButton = ui::makePrimaryButton(QStringLiteral("保存设置"), buttons);
     saveButton->setDefault(true);
-    auto *reloadButton = new QPushButton(QStringLiteral("重新加载"), buttons);
-    reloadButton->setAutoDefault(false);
+    auto *reloadButton = ui::makeButton(QStringLiteral("重新加载"), buttons);
 
     buttonLayout->addWidget(saveButton);
     buttonLayout->addWidget(reloadButton);
     buttonLayout->addStretch(1);
 
-    m_feedback = new QLabel(buttons);
+    m_feedback = ui::makeStatusLabel(buttons);
     m_feedback->setMinimumWidth(240);
     buttonLayout->addWidget(m_feedback);
 
@@ -155,13 +138,12 @@ QWidget *SettingsPage::buildLegacySection()
     auto *layout = new QVBoxLayout(group);
     layout->setSpacing(10);
 
-    auto *explanation = new QLabel(LegacyDataService::explanation(), group);
-    explanation->setWordWrap(true);
-    explanation->setStyleSheet(QStringLiteral("color: #667085;"));
+    auto *explanation = ui::makeHintLabel(LegacyDataService::explanation(), group);
     layout->addWidget(explanation);
 
     m_legacyStatus = new QLabel(group);
     m_legacyStatus->setWordWrap(true);
+    ui::applyRole(m_legacyStatus, "hint");
     layout->addWidget(m_legacyStatus);
 
     auto *buttons = new QWidget(group);
@@ -169,11 +151,8 @@ QWidget *SettingsPage::buildLegacySection()
     buttonLayout->setContentsMargins(0, 0, 0, 0);
     buttonLayout->setSpacing(10);
 
-    auto *refreshButton = new QPushButton(QStringLiteral("刷新统计"), buttons);
-    refreshButton->setAutoDefault(false);
-    m_clearLegacyButton = new QPushButton(QStringLiteral("清理旧考试数据…"), buttons);
-    m_clearLegacyButton->setAutoDefault(false);
-    m_clearLegacyButton->setStyleSheet(QStringLiteral("color: #b42318;"));
+    auto *refreshButton = ui::makeButton(QStringLiteral("刷新统计"), buttons);
+    m_clearLegacyButton = ui::makeDangerButton(QStringLiteral("清理旧考试数据…"), buttons);
 
     buttonLayout->addWidget(refreshButton);
     buttonLayout->addWidget(m_clearLegacyButton);
@@ -210,13 +189,13 @@ void SettingsPage::reloadLegacy()
     auto stats = service.stats();
     if (!stats) {
         m_legacyStatus->setText(QStringLiteral("读取旧数据统计失败：%1").arg(stats.errorMessage()));
-        m_legacyStatus->setStyleSheet(QStringLiteral("color: #b42318;"));
+        ui::applyRole(m_legacyStatus, "error");
         m_clearLegacyButton->setEnabled(false);
         return;
     }
 
     m_legacyStatus->setText(stats.value().summaryText());
-    m_legacyStatus->setStyleSheet(QStringLiteral("color: #667085;"));
+    ui::applyRole(m_legacyStatus, "hint");
     m_clearLegacyButton->setEnabled(stats.value().any());
 }
 
@@ -234,13 +213,12 @@ void SettingsPage::clearLegacy()
         return;
     }
 
-    const auto first = QMessageBox::warning(
-        this, QStringLiteral("确认清理旧数据"),
-        QStringLiteral("即将删除旧版考试数据：\n\n%1\n\n"
-                       "学生档案、科目与新成绩记录不会受到影响。\n该操作不可撤销，确定继续吗？")
-            .arg(stats.value().summaryText()),
-        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-    if (first != QMessageBox::Yes)
+    if (!ui::confirmDanger(
+            this, QStringLiteral("确认清理旧数据"),
+            QStringLiteral("即将删除旧版考试数据：\n\n%1\n\n"
+                           "学生档案、科目与新成绩记录不会受到影响。\n该操作不可撤销，确定继续吗？")
+                .arg(stats.value().summaryText()),
+            QStringLiteral("继续")))
         return;
 
     bool accepted = false;
@@ -301,8 +279,7 @@ void SettingsPage::openPath(const QString &path, bool isDirectory)
 void SettingsPage::showFeedback(const QString &message, bool error)
 {
     m_feedback->setText(message);
-    m_feedback->setStyleSheet(error ? QStringLiteral("color: #c0392b;")
-                                    : QStringLiteral("color: #1f7a3f;"));
+    ui::applyRole(m_feedback, error ? "error" : "success");
 }
 
 } // namespace cutee

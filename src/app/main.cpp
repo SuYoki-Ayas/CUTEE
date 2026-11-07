@@ -1,4 +1,5 @@
 #include "app/MainWindow.h"
+#include "app/Theme.h"
 #include "core/AppPaths.h"
 #include "core/Logging.h"
 #include "storage/Database.h"
@@ -9,6 +10,8 @@
 
 int main(int argc, char *argv[])
 {
+    cutee::theme::applyHighDpiPolicy();
+
     QApplication app(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("CUTEE"));
     QCoreApplication::setOrganizationDomain(QStringLiteral("cutee.local"));
@@ -16,6 +19,8 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationVersion(QStringLiteral(CUTEE_VERSION));
 
     cutee::logging::init();
+    cutee::theme::apply(app);
+
     qInfo().noquote() << QStringLiteral("CUTEE %1 启动，数据目录：%2")
                              .arg(QStringLiteral(CUTEE_VERSION),
                                   cutee::AppPaths::dataDirectory());

@@ -4,6 +4,7 @@
 #include "storage/Database.h"
 #include "storage/DbUtils.h"
 
+#include <QHash>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QVariant>
@@ -239,6 +240,19 @@ Result<int> SubjectRepository::referenceCount(qint64 id) const
     if (!query.next())
         return 0;
     return query.value(0).toInt();
+}
+
+Result<QHash<qint64, int>> SubjectRepository::referenceCounts() const
+{
+    QSqlQuery query(m_database.connection());
+    if (!query.exec(QStringLiteral(
+            "SELECT subject_id, COUNT(*) FROM exam_records GROUP BY subject_id")))
+        return Error(query.lastError().text(), QStringLiteral("SubjectRepository::referenceCounts"));
+
+    QHash<qint64, int> counts;
+    while (query.next())
+        counts.insert(query.value(0).toLongLong(), query.value(1).toInt());
+    return counts;
 }
 
 Result<int> SubjectRepository::nextSortOrder(ExamType type) const

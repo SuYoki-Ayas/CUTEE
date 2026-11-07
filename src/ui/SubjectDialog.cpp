@@ -1,5 +1,7 @@
 #include "ui/SubjectDialog.h"
 
+#include "ui/UiKit.h"
+
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -22,8 +24,12 @@ SubjectDialog::SubjectDialog(const Subject &subject, bool isNew, QWidget *parent
     setMinimumWidth(460);
 
     auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(20, 20, 20, 16);
+    layout->setSpacing(14);
     auto *form = new QFormLayout();
     form->setSpacing(10);
+    form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
 
     m_name = new QLineEdit(m_subject.name, this);
     m_name->setPlaceholderText(QStringLiteral("例如：NOIP、模拟赛、数学、英语"));
@@ -52,9 +58,8 @@ SubjectDialog::SubjectDialog(const Subject &subject, bool isNew, QWidget *parent
     form->addRow(QStringLiteral("备注"), m_note);
 
     if (!isNew) {
-        auto *hint = new QLabel(QStringLiteral("科目类型创建后不可修改，如需更换类型请新建科目。"), this);
-        hint->setWordWrap(true);
-        hint->setStyleSheet(QStringLiteral("color: #667085;"));
+        auto *hint = ui::makeHintLabel(QStringLiteral("科目类型创建后不可修改，如需更换类型请新建科目。"),
+                                       this);
         form->addRow(QString(), hint);
     }
 
@@ -63,6 +68,7 @@ SubjectDialog::SubjectDialog(const Subject &subject, bool isNew, QWidget *parent
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, this);
     buttons->button(QDialogButtonBox::Save)->setText(QStringLiteral("保存"));
     buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("取消"));
+    ui::applyRole(buttons->button(QDialogButtonBox::Save), "primary");
     layout->addWidget(buttons);
 
     connect(buttons, &QDialogButtonBox::accepted, this, &SubjectDialog::accept);

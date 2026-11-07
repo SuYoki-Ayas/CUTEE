@@ -32,7 +32,8 @@ MainWindow::MainWindow(Database &database, SettingsRepository &settings, QWidget
     , m_settings(settings)
 {
     setWindowTitle(QStringLiteral("CUTEE 学生成绩管理 %1").arg(QStringLiteral(CUTEE_VERSION)));
-    resize(1180, 760);
+    setMinimumSize(1024, 680);
+    resize(1240, 800);
     buildUi();
     restoreUiState();
 
@@ -72,6 +73,7 @@ void MainWindow::buildUi()
     setCentralWidget(central);
 
     m_statusLabel = new QLabel(this);
+    m_statusLabel->setObjectName(QStringLiteral("statusLabel"));
     statusBar()->addPermanentWidget(m_statusLabel);
     statusBar()->showMessage(QStringLiteral("就绪"));
 
@@ -85,26 +87,14 @@ QWidget *MainWindow::buildSidebar()
 {
     auto *sidebar = new QWidget(this);
     sidebar->setObjectName(QStringLiteral("sidebar"));
-    sidebar->setFixedWidth(210);
-    sidebar->setStyleSheet(QStringLiteral(
-        "#sidebar { background: #1f2530; }"
-        "#sidebar QLabel { color: #f2f5f9; }"
-        "#sidebar QLabel#appSubtitle { color: #93a1b3; }"
-        "#sidebar QListWidget { background: transparent; border: none; color: #cbd5e1;"
-        " outline: none; font-size: 14px; }"
-        "#sidebar QListWidget::item { padding: 11px 16px; border-radius: 6px; margin: 2px 8px; }"
-        "#sidebar QListWidget::item:selected { background: #2f81f7; color: #ffffff; }"
-        "#sidebar QListWidget::item:hover:!selected { background: #2a3242; }"));
+    sidebar->setFixedWidth(212);
 
     auto *layout = new QVBoxLayout(sidebar);
     layout->setContentsMargins(8, 18, 8, 12);
     layout->setSpacing(10);
 
     auto *title = new QLabel(QStringLiteral("CUTEE"), sidebar);
-    QFont titleFont = title->font();
-    titleFont.setPointSize(titleFont.pointSize() + 6);
-    titleFont.setBold(true);
-    title->setFont(titleFont);
+    title->setObjectName(QStringLiteral("appTitle"));
     title->setContentsMargins(10, 4, 0, 0);
     layout->addWidget(title);
 
@@ -114,7 +104,10 @@ QWidget *MainWindow::buildSidebar()
     layout->addWidget(subtitle);
 
     m_nav = new QListWidget(sidebar);
+    m_nav->setObjectName(QStringLiteral("navList"));
     m_nav->setFocusPolicy(Qt::NoFocus);
+    m_nav->setUniformItemSizes(true);
+    m_nav->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     layout->addWidget(m_nav, 1);
 
     auto *version = new QLabel(QStringLiteral("版本 %1 · 单机离线").arg(QStringLiteral(CUTEE_VERSION)),
@@ -153,6 +146,14 @@ void MainWindow::restoreUiState()
     const auto geometry = m_settings.value(QLatin1String(settings::kWindowGeometry));
     if (geometry.ok() && !geometry.value().isEmpty())
         restoreGeometry(QByteArray::fromBase64(geometry.value().toLatin1()));
+
+    // A geometry saved on a 100% screen can come back smaller than the minimum
+    // size once Windows reports a different device pixel ratio.
+    if (!isMaximized() && !isFullScreen()) {
+        const QSize minimum = minimumSize();
+        if (width() < minimum.width() || height() < minimum.height())
+            resize(qMax(width(), minimum.width()), qMax(height(), minimum.height()));
+    }
 
     const auto state = m_settings.value(QLatin1String(settings::kWindowState));
     if (state.ok() && !state.value().isEmpty())

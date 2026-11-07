@@ -10,7 +10,7 @@ if(MSVC)
     add_compile_options(/utf-8 /permissive-)
 endif()
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Sql Test)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Sql Concurrent Test)
 
 qt_standard_project_setup(REQUIRES 6.5)
 
@@ -61,10 +61,29 @@ else()
     target_compile_options(cutee_core PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+# Presentation models shared by the pages and the unit tests. They need Qt Gui
+# only for role colours, so they stay out of the executable target.
+add_library(cutee_models STATIC
+    src/ui/ScoreTableModel.h
+    src/ui/ScoreTableModel.cpp
+)
+target_link_libraries(cutee_models PUBLIC cutee_core Qt6::Gui)
+
+if(MSVC)
+    target_compile_options(cutee_models PRIVATE /W4)
+else()
+    target_compile_options(cutee_models PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 qt_add_executable(CUTEE
+    resources/cutee.qrc
     src/app/main.cpp
     src/app/MainWindow.h
     src/app/MainWindow.cpp
+    src/app/Theme.h
+    src/app/Theme.cpp
+    src/ui/UiKit.h
+    src/ui/UiKit.cpp
     src/ui/LogPage.h
     src/ui/LogPage.cpp
     src/ui/ProfilePage.h
@@ -82,8 +101,10 @@ qt_add_executable(CUTEE
     src/ui/SubjectPage.h
     src/ui/SubjectPage.cpp
 )
-set_target_properties(CUTEE PROPERTIES WIN32_EXECUTABLE "$<NOT:$<CONFIG:Debug>>")
-target_link_libraries(CUTEE PRIVATE cutee_core Qt6::Widgets)
+set_target_properties(CUTEE PROPERTIES
+    WIN32_EXECUTABLE "$<NOT:$<CONFIG:Debug>>"
+    AUTORCC ON)
+target_link_libraries(CUTEE PRIVATE cutee_core cutee_models Qt6::Widgets Qt6::Concurrent)
 
 option(CUTEE_BUILD_TESTS "Build the Qt Test suites" ON)
 if(CUTEE_BUILD_TESTS)

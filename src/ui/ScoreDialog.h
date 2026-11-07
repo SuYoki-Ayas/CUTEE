@@ -7,8 +7,10 @@
 
 class QComboBox;
 class QDateEdit;
+class QLabel;
 class QLineEdit;
 class QPlainTextEdit;
+class QPushButton;
 class QSpinBox;
 
 namespace cutee {
@@ -28,6 +30,9 @@ public:
 private:
     void accept() override;
     void refreshSubjects();
+    void refreshValidation(bool showErrors);
+    QString validationMessage() const;
+    void markInvalid(QWidget *field, bool invalid);
 
     ExamRecord m_record;
     QVector<Subject> m_subjects;
@@ -40,6 +45,7 @@ private:
     QSpinBox *m_rank = nullptr;
     QSpinBox *m_participants = nullptr;
     QPlainTextEdit *m_note = nullptr;
+    QLabel *m_error = nullptr;
 };
 
 } // namespace cutee
