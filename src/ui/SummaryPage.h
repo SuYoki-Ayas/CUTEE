@@ -15,6 +15,7 @@ class QTableWidget;
 namespace cutee {
 
 class Database;
+class TrendChart;
 
 /// Background summary result. Rows are aggregated on a worker thread with its
 /// own SQLite connection so a slow statistic never freezes the window.
@@ -23,6 +24,7 @@ struct SummaryOutcome
     bool ok = false;
     QString error;
     ScoreSummary summary;
+    QVector<ExamRecord> records;
 };
 
 class SummaryPage : public QWidget
@@ -65,6 +67,8 @@ private:
     QWidget *m_emptyPage = nullptr;
     QLabel *m_emptyTitle = nullptr;
     QLabel *m_emptyHint = nullptr;
+
+    TrendChart *m_trend = nullptr;
 
     QTableWidget *m_subjectTable = nullptr;
     QTableWidget *m_typeTable = nullptr;

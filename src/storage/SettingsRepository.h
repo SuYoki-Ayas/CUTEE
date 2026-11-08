@@ -29,6 +29,7 @@ inline constexpr char kLastPage[] = "ui.last_page";
 inline constexpr char kWindowGeometry[] = "ui.window_geometry";
 inline constexpr char kWindowState[] = "ui.window_state";
 inline constexpr char kWindowMaximized[] = "ui.window_maximized";
+inline constexpr char kScoreHiddenColumns[] = "ui.score_hidden_columns";
 
 } // namespace settings
 

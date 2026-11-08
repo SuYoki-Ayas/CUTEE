@@ -5,6 +5,8 @@
 #include "core/ScoreValue.h"
 #include "service/ScoreService.h"
 #include "storage/Database.h"
+#include "ui/Palette.h"
+#include "ui/TrendChart.h"
 #include "ui/UiKit.h"
 
 #include <QComboBox>
@@ -13,13 +15,16 @@
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QKeySequence>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPushButton>
+#include <QShortcut>
 #include <QStackedWidget>
 #include <QStandardPaths>
 #include <QStyledItemDelegate>
+#include <QTabWidget>
 #include <QTableWidget>
 #include <QUuid>
 #include <QVBoxLayout>
@@ -60,10 +65,10 @@ public:
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing, true);
         painter->setPen(Qt::NoPen);
-        painter->setBrush(QColor(QStringLiteral("#eef1f4")));
+        painter->setBrush(palette::color(palette::kChartTrack));
         painter->drawRoundedRect(bar, 3, 3);
-        QColor fill(QStringLiteral("#2f6fed"));
-        fill.setAlpha(110);
+        QColor fill(palette::color(palette::kChartPoint));
+        fill.setAlpha(150);
         painter->setBrush(fill);
         painter->drawRoundedRect(QRect(bar.left(), bar.top(), fillWidth, bar.height()), 3, 3);
 
@@ -142,7 +147,20 @@ SummaryOutcome runSummary(const QString &databasePath, const DateRange &range)
         return outcome;
     }
 
+    ExamRecordFilter filter;
+    if (!range.isAll()) {
+        filter.from = range.from;
+        filter.to = range.to;
+    }
+    filter.newestFirst = false;
+    auto records = service.list(filter);
+    if (!records) {
+        outcome.error = records.errorMessage();
+        return outcome;
+    }
+
     outcome.summary = summarized.value();
+    outcome.records = records.value();
     outcome.ok = true;
     return outcome;
 }
@@ -165,7 +183,7 @@ SummaryPage::SummaryPage(Database &database, QWidget *parent)
 
     layout->addWidget(ui::makePageTitle(QStringLiteral("成绩汇总"), this));
     layout->addWidget(ui::makePageDescription(
-        QStringLiteral("按科目和考试类型分别统计。OI 竞赛与文化课分数不可比，因此始终分开计算。"
+        QStringLiteral("按科目和考试类型分别统计。OI 竞赛与文化课分数始终分开计算。"
                        "“本学期”指 2 月 1 日至 8 月 31 日，或 9 月 1 日至次年 1 月 31 日。"),
         this));
     layout->addWidget(buildFilterBar());
@@ -189,6 +207,10 @@ SummaryPage::SummaryPage(Database &database, QWidget *parent)
         if (m_to->isEnabled())
             reload();
     });
+
+    auto *exportShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+E")), this);
+    exportShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(exportShortcut, &QShortcut::activated, this, &SummaryPage::exportCsv);
 
     reload();
 }
@@ -221,6 +243,7 @@ QWidget *SummaryPage::buildFilterBar()
 
     auto *refreshButton = ui::makeButton(QStringLiteral("刷新"), bar);
     m_exportButton = ui::makeButton(QStringLiteral("导出汇总 CSV"), bar);
+    m_exportButton->setToolTip(QStringLiteral("导出汇总 CSV（Ctrl+E）"));
 
     row->addWidget(new QLabel(QStringLiteral("时间范围"), bar));
     row->addWidget(m_rangeKind);
@@ -242,30 +265,39 @@ QWidget *SummaryPage::buildContent()
     m_content = new QStackedWidget(this);
     m_content->addWidget(buildEmptyState());
 
-    m_tablesPage = new QWidget(m_content);
-    auto *tablesLayout = new QVBoxLayout(m_tablesPage);
-    tablesLayout->setContentsMargins(0, 0, 0, 0);
+    auto *tabs = new QTabWidget(m_content);
+    tabs->setDocumentMode(true);
+    m_tablesPage = tabs;
+
+    auto *summaryTab = new QWidget(tabs);
+    auto *tablesLayout = new QVBoxLayout(summaryTab);
+    tablesLayout->setContentsMargins(0, 8, 0, 0);
     tablesLayout->setSpacing(10);
 
-    tablesLayout->addWidget(ui::makeSectionTitle(QStringLiteral("按科目汇总"), m_tablesPage));
+    tablesLayout->addWidget(ui::makeSectionTitle(QStringLiteral("按科目汇总"), summaryTab));
     m_subjectTable = makeSummaryTable(
         {QStringLiteral("科目类型"), QStringLiteral("科目"), QStringLiteral("考试次数"),
          QStringLiteral("平均得分"), QStringLiteral("平均得分率"), QStringLiteral("最高分"),
          QStringLiteral("最低分"), QStringLiteral("最近考试日期"),
          QStringLiteral("最近考试名称"), QStringLiteral("最近一次成绩")},
-        m_tablesPage);
+        summaryTab);
     tablesLayout->addWidget(m_subjectTable, 3);
 
-    tablesLayout->addWidget(ui::makeSectionTitle(QStringLiteral("按考试类型汇总"), m_tablesPage));
+    tablesLayout->addWidget(ui::makeSectionTitle(QStringLiteral("按考试类型汇总"), summaryTab));
     m_typeTable = makeSummaryTable(
         {QStringLiteral("考试类型"), QStringLiteral("备注"), QStringLiteral("考试次数"),
          QStringLiteral("平均得分"), QStringLiteral("平均得分率"), QStringLiteral("最高分"),
          QStringLiteral("最低分"), QStringLiteral("最近考试日期"),
          QStringLiteral("最近考试名称"), QStringLiteral("最近一次成绩")},
-        m_tablesPage);
+        summaryTab);
     tablesLayout->addWidget(m_typeTable, 1);
 
-    m_content->addWidget(m_tablesPage);
+    tabs->addTab(summaryTab, QStringLiteral("汇总表"));
+
+    m_trend = new TrendChart(tabs);
+    tabs->addTab(m_trend, QStringLiteral("成绩趋势"));
+
+    m_content->addWidget(tabs);
     return m_content;
 }
 
@@ -329,10 +361,14 @@ void SummaryPage::applyOutcome(const SummaryOutcome &outcome)
 {
     if (!outcome.ok) {
         m_summary->setText(QStringLiteral("统计失败：%1").arg(outcome.error));
+        if (m_trend)
+            m_trend->clear();
         return;
     }
 
     m_lastSummary = outcome.summary;
+    if (m_trend)
+        m_trend->setData(outcome.records, m_lastSummary.bySubject);
 
     m_subjectTable->setRowCount(m_lastSummary.bySubject.size());
     for (int row = 0; row < m_lastSummary.bySubject.size(); ++row) {

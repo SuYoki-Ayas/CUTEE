@@ -1,15 +1,19 @@
 #pragma once
 
+#include <QFutureWatcher>
 #include <QWidget>
 
 #include "core/Models.h"
 #include "service/ScoreService.h"
+#include "storage/SettingsRepository.h"
 
+class QAction;
 class QCheckBox;
 class QComboBox;
 class QDateEdit;
 class QLabel;
 class QLineEdit;
+class QMenu;
 class QPushButton;
 class QStackedWidget;
 class QTableView;
@@ -20,6 +24,15 @@ namespace cutee {
 class Database;
 class ScoreFilterProxyModel;
 class ScoreTableModel;
+
+/// Background result for the full record list, fetched on its own SQLite
+/// connection so a large table never blocks the window.
+struct ScoreLoadOutcome
+{
+    bool ok = false;
+    QString error;
+    QVector<ExamRecord> records;
+};
 
 /// Score list backed by a table model plus a filtering/sorting proxy, so filter
 /// changes never rebuild the page or re-query the database.
@@ -54,11 +67,20 @@ private:
     void removeRecord();
     void exportCsv();
 
+    void buildColumnsMenu();
+    void applyColumnVisibility();
+    void saveColumnVisibility();
+
     bool hasSelection() const;
     ExamRecord selectedRecord() const;
     QVector<ExamRecord> visibleRecords() const;
 
     ScoreService m_service;
+    Database &m_database;
+    SettingsRepository m_settings;
+    QFutureWatcher<ScoreLoadOutcome> *m_watcher = nullptr;
+    bool m_loading = false;
+    bool m_pending = false;
     ScoreTableModel *m_model = nullptr;
     ScoreFilterProxyModel *m_proxy = nullptr;
 
@@ -82,6 +104,9 @@ private:
     QPushButton *m_editButton = nullptr;
     QPushButton *m_deleteButton = nullptr;
     QPushButton *m_exportButton = nullptr;
+    QPushButton *m_columnsButton = nullptr;
+    QMenu *m_columnsMenu = nullptr;
+    QVector<QAction *> m_columnActions;
 };
 
 } // namespace cutee

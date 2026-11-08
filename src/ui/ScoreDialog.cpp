@@ -97,7 +97,7 @@ ScoreDialog::ScoreDialog(const ExamRecord *existing, const QVector<Subject> &sub
     form->addRow(QStringLiteral("备注"), m_note);
 
     auto *hint = ui::makeHintLabel(
-        QStringLiteral("得分与满分按两位小数精确保存；得分可以高于满分，但保存前会再次确认。"), this);
+        QStringLiteral("得分与满分按两位小数精确保存。"), this);
     form->addRow(QString(), hint);
 
     layout->addLayout(form);
@@ -188,7 +188,7 @@ void ScoreDialog::refreshValidation(bool showErrors)
     const auto score = scoreutil::parsePoints(m_score->text());
     if (score && fullScore && *fullScore > 0 && *score > *fullScore) {
         ui::applyRole(m_error, "warning");
-        m_error->setText(QStringLiteral("得分高于满分，保存时会再次确认。"));
+        m_error->setText(QStringLiteral("得分高于满分，保存时需再次确认。"));
         m_error->setVisible(true);
         return;
     }

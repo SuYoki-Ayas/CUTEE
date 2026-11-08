@@ -1,11 +1,12 @@
-﻿#pragma once
+#pragma once
 
 #include <QHash>
 #include <QMainWindow>
 
 class QLabel;
-class QListWidget;
 class QStackedWidget;
+class QTreeWidget;
+class QTreeWidgetItem;
 
 namespace cutee {
 
@@ -28,18 +29,28 @@ protected:
 private:
     void buildUi();
     QWidget *buildSidebar();
-    void addPage(const QString &id, const QString &title, QWidget *page);
+    void installShortcuts();
+    void addPage(const QString &id, QWidget *page);
     void selectPage(const QString &id);
+    void activateNavItem(QTreeWidgetItem *item);
+    QTreeWidgetItem *findNavItem(const QString &id) const;
     void restoreUiState();
     void saveUiState();
     void showFirstRunHint();
+    void refreshStudentHeader();
+    void reloadAllPages();
+    void updateStatusBar();
 
     Database &m_database;
     SettingsRepository &m_settings;
 
-    QListWidget *m_nav = nullptr;
+    QTreeWidget *m_nav = nullptr;
     QStackedWidget *m_stack = nullptr;
     QLabel *m_statusLabel = nullptr;
+    QLabel *m_studentName = nullptr;
+    QLabel *m_studentGrade = nullptr;
+    QLabel *m_studentGoal = nullptr;
+    QWidget *m_studentBlock = nullptr;
     QHash<QString, int> m_pageIndex;
     bool m_firstRunHintShown = false;
 };

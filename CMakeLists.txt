@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.21)
 
 project(CUTEE VERSION 0.2.0 LANGUAGES CXX)
 
@@ -10,7 +10,7 @@ if(MSVC)
     add_compile_options(/utf-8 /permissive-)
 endif()
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Sql Concurrent Test)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Sql Concurrent Test Charts)
 
 qt_standard_project_setup(REQUIRES 6.5)
 
@@ -28,10 +28,14 @@ set(CUTEE_CORE_SOURCES
     src/core/ScoreSummary.cpp
     src/core/ScoreValue.h
     src/core/ScoreValue.cpp
+    src/core/SchoolStage.h
+    src/core/SchoolStage.cpp
     src/core/TimeUtils.h
     src/core/TimeUtils.cpp
     src/storage/Database.h
     src/storage/Database.cpp
+    src/storage/DataMaintenance.h
+    src/storage/DataMaintenance.cpp
     src/storage/DbUtils.h
     src/storage/DbUtils.cpp
     src/storage/Migrations.h
@@ -46,8 +50,6 @@ set(CUTEE_CORE_SOURCES
     src/storage/SubjectRepository.cpp
     src/service/ScoreService.h
     src/service/ScoreService.cpp
-    src/service/LegacyDataService.h
-    src/service/LegacyDataService.cpp
 )
 
 add_library(cutee_core STATIC ${CUTEE_CORE_SOURCES})
@@ -66,6 +68,7 @@ endif()
 add_library(cutee_models STATIC
     src/ui/ScoreTableModel.h
     src/ui/ScoreTableModel.cpp
+    src/ui/Palette.h
 )
 target_link_libraries(cutee_models PUBLIC cutee_core Qt6::Gui)
 
@@ -82,8 +85,12 @@ qt_add_executable(CUTEE
     src/app/MainWindow.cpp
     src/app/Theme.h
     src/app/Theme.cpp
+    src/ui/Palette.h
     src/ui/UiKit.h
     src/ui/UiKit.cpp
+    src/ui/DangerConfirmDialog.h
+    src/ui/DangerConfirmDialog.cpp
+    src/ui/TagDelegate.h
     src/ui/LogPage.h
     src/ui/LogPage.cpp
     src/ui/ProfilePage.h
@@ -94,6 +101,8 @@ qt_add_executable(CUTEE
     src/ui/ScorePage.cpp
     src/ui/SummaryPage.h
     src/ui/SummaryPage.cpp
+    src/ui/TrendChart.h
+    src/ui/TrendChart.cpp
     src/ui/SettingsPage.h
     src/ui/SettingsPage.cpp
     src/ui/SubjectDialog.h
@@ -104,7 +113,7 @@ qt_add_executable(CUTEE
 set_target_properties(CUTEE PROPERTIES
     WIN32_EXECUTABLE "$<NOT:$<CONFIG:Debug>>"
     AUTORCC ON)
-target_link_libraries(CUTEE PRIVATE cutee_core cutee_models Qt6::Widgets Qt6::Concurrent)
+target_link_libraries(CUTEE PRIVATE cutee_core cutee_models Qt6::Widgets Qt6::Concurrent Qt6::Charts)
 
 option(CUTEE_BUILD_TESTS "Build the Qt Test suites" ON)
 if(CUTEE_BUILD_TESTS)

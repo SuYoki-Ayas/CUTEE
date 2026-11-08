@@ -15,9 +15,11 @@ StudentProfile profileFromQuery(const QSqlQuery &query)
 {
     StudentProfile profile;
     profile.name = query.value(QStringLiteral("name")).toString();
-    profile.studentNo = query.value(QStringLiteral("student_no")).toString();
-    profile.schoolClass = query.value(QStringLiteral("school_class")).toString();
-    profile.note = query.value(QStringLiteral("note")).toString();
+    SchoolStage stage;
+    if (schoolStageFromStorage(query.value(QStringLiteral("stage")).toString(), &stage))
+        profile.stage = stage;
+    profile.enrollmentYear = query.value(QStringLiteral("enrollment_year")).toInt();
+    profile.targetSchool = query.value(QStringLiteral("note")).toString();
     profile.createdAt = timeutil::fromIso(query.value(QStringLiteral("created_at")).toString());
     profile.updatedAt = timeutil::fromIso(query.value(QStringLiteral("updated_at")).toString());
     return profile;
@@ -34,7 +36,7 @@ Result<std::optional<StudentProfile>> StudentProfileRepository::load() const
 {
     QSqlQuery query(m_database.connection());
     query.prepare(QStringLiteral(
-        "SELECT name, student_no, school_class, note, created_at, updated_at "
+        "SELECT name, stage, enrollment_year, note, created_at, updated_at "
         "FROM student_profile WHERE id = 1"));
     if (!query.exec())
         return Error(query.lastError().text(), QStringLiteral("StudentProfileRepository::load"));
@@ -63,15 +65,16 @@ Result<void> StudentProfileRepository::save(const StudentProfile &profile)
     auto result = db::execute(
         m_database.connection(),
         QStringLiteral(
-            "INSERT INTO student_profile (id, name, student_no, school_class, note, created_at, updated_at) "
+            "INSERT INTO student_profile (id, name, stage, enrollment_year, note, created_at, updated_at) "
             "VALUES (1, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET "
             "  name = excluded.name,"
-            "  student_no = excluded.student_no,"
-            "  school_class = excluded.school_class,"
+            "  stage = excluded.stage,"
+            "  enrollment_year = excluded.enrollment_year,"
             "  note = excluded.note,"
             "  updated_at = excluded.updated_at"),
-        {name, profile.studentNo.trimmed(), profile.schoolClass.trimmed(), profile.note, nowIso, nowIso});
+        {name, schoolStageToStorage(profile.stage), qMax(0, profile.enrollmentYear),
+         profile.targetSchool.trimmed(), nowIso, nowIso});
     if (!result) {
         return Error(result.error().message(),
                      QStringLiteral("StudentProfileRepository::save"));

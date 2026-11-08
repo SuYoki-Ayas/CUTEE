@@ -39,4 +39,9 @@ QString AppPaths::logFile()
     return QDir(logDirectory()).filePath(QStringLiteral("cutee.log"));
 }
 
+QString AppPaths::backupDirectory()
+{
+    return QDir(dataDirectory()).filePath(QStringLiteral("backups"));
+}
+
 } // namespace cutee

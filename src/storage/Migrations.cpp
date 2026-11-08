@@ -6,118 +6,6 @@ const QVector<Migration> &migrations()
 {
     static const QVector<Migration> value = {
         {
-            1,
-            QStringLiteral("initial schema: students, questions, exams, answers, scores, settings"),
-            {
-                // ---- students ----------------------------------------------------
-                QStringLiteral(R"(CREATE TABLE IF NOT EXISTS students (
-                    id         TEXT PRIMARY KEY NOT NULL,
-                    name       TEXT NOT NULL,
-                    student_no TEXT NOT NULL DEFAULT '',
-                    class_name TEXT NOT NULL DEFAULT '',
-                    note       TEXT NOT NULL DEFAULT '',
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                ))"),
-                QStringLiteral(R"(CREATE UNIQUE INDEX IF NOT EXISTS idx_students_student_no
-                    ON students(student_no) WHERE student_no <> '')"),
-                QStringLiteral("CREATE INDEX IF NOT EXISTS idx_students_name ON students(name)"),
-
-                // ---- questions ---------------------------------------------------
-                QStringLiteral(R"(CREATE TABLE IF NOT EXISTS questions (
-                    id          TEXT PRIMARY KEY NOT NULL,
-                    type        TEXT NOT NULL,
-                    title       TEXT NOT NULL,
-                    stem        TEXT NOT NULL DEFAULT '',
-                    options_json TEXT NOT NULL DEFAULT '[]',
-                    answer_json TEXT NOT NULL DEFAULT 'null',
-                    score       REAL NOT NULL DEFAULT 0,
-                    difficulty  TEXT NOT NULL DEFAULT 'medium',
-                    tags        TEXT NOT NULL DEFAULT '',
-                    match_mode  TEXT NOT NULL DEFAULT 'trim_case_insensitive',
-                    created_at  TEXT NOT NULL,
-                    updated_at  TEXT NOT NULL
-                ))"),
-                QStringLiteral("CREATE INDEX IF NOT EXISTS idx_questions_type ON questions(type)"),
-
-                // ---- exams -------------------------------------------------------
-                QStringLiteral(R"(CREATE TABLE IF NOT EXISTS exams (
-                    id               TEXT PRIMARY KEY NOT NULL,
-                    title            TEXT NOT NULL,
-                    note             TEXT NOT NULL DEFAULT '',
-                    start_time       TEXT NOT NULL,
-                    end_time         TEXT NOT NULL,
-                    duration_minutes INTEGER NOT NULL DEFAULT 0,
-                    status           TEXT NOT NULL DEFAULT 'draft',
-                    created_at       TEXT NOT NULL,
-                    updated_at       TEXT NOT NULL
-                ))"),
-                QStringLiteral("CREATE INDEX IF NOT EXISTS idx_exams_status ON exams(status)"),
-
-                // ---- exam <-> question ------------------------------------------
-                QStringLiteral(R"(CREATE TABLE IF NOT EXISTS exam_questions (
-                    exam_id     TEXT NOT NULL,
-                    question_id TEXT NOT NULL,
-                    score       REAL NOT NULL DEFAULT 0,
-                    order_index INTEGER NOT NULL DEFAULT 0,
-                    PRIMARY KEY (exam_id, question_id),
-                    FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE,
-                    FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE RESTRICT
-                ))"),
-
-                // ---- exam <-> student -------------------------------------------
-                QStringLiteral(R"(CREATE TABLE IF NOT EXISTS exam_students (
-                    exam_id    TEXT NOT NULL,
-                    student_id TEXT NOT NULL,
-                    PRIMARY KEY (exam_id, student_id),
-                    FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE,
-                    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT
-                ))"),
-
-                // ---- answers -----------------------------------------------------
-                QStringLiteral(R"(CREATE TABLE IF NOT EXISTS answers (
-                    exam_id     TEXT NOT NULL,
-                    student_id  TEXT NOT NULL,
-                    question_id TEXT NOT NULL,
-                    answer_json TEXT NOT NULL DEFAULT 'null',
-                    updated_at  TEXT NOT NULL,
-                    PRIMARY KEY (exam_id, student_id, question_id),
-                    FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE,
-                    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
-                    FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
-                ))"),
-
-                // ---- submissions -------------------------------------------------
-                QStringLiteral(R"(CREATE TABLE IF NOT EXISTS submissions (
-                    exam_id      TEXT NOT NULL,
-                    student_id   TEXT NOT NULL,
-                    submitted_at TEXT NOT NULL,
-                    status       TEXT NOT NULL DEFAULT 'submitted',
-                    PRIMARY KEY (exam_id, student_id),
-                    FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE,
-                    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
-                ))"),
-
-                // ---- scores ------------------------------------------------------
-                QStringLiteral(R"(CREATE TABLE IF NOT EXISTS scores (
-                    exam_id     TEXT NOT NULL,
-                    student_id  TEXT NOT NULL,
-                    total_score REAL NOT NULL DEFAULT 0,
-                    detail_json TEXT NOT NULL DEFAULT '{}',
-                    graded_at   TEXT NOT NULL,
-                    PRIMARY KEY (exam_id, student_id),
-                    FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE,
-                    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
-                ))"),
-
-                // ---- settings ----------------------------------------------------
-                QStringLiteral(R"(CREATE TABLE IF NOT EXISTS settings (
-                    key   TEXT PRIMARY KEY NOT NULL,
-                    value TEXT NOT NULL DEFAULT ''
-                ))"),
-            },
-        },
-        {
             2,
             QStringLiteral("single student profile, subjects and exam_records"),
             {
@@ -131,16 +19,6 @@ const QVector<Migration> &migrations()
                     created_at   TEXT NOT NULL DEFAULT '',
                     updated_at   TEXT NOT NULL DEFAULT ''
                 ))"),
-
-                // Adopt the first legacy student instead of deleting the roster.
-                // The legacy students table is left untouched.
-                QStringLiteral(R"(INSERT INTO student_profile
-                        (id, name, student_no, school_class, note, created_at, updated_at)
-                    SELECT 1, name, student_no, class_name, note, created_at, updated_at
-                    FROM students
-                    WHERE NOT EXISTS (SELECT 1 FROM student_profile)
-                    ORDER BY created_at, id
-                    LIMIT 1)"),
 
                 // ---- subjects ----------------------------------------------------
                 QStringLiteral(R"(CREATE TABLE IF NOT EXISTS subjects (
@@ -179,6 +57,26 @@ const QVector<Migration> &migrations()
                 QStringLiteral("CREATE INDEX IF NOT EXISTS idx_exam_records_date ON exam_records(exam_date)"),
                 QStringLiteral("CREATE INDEX IF NOT EXISTS idx_exam_records_subject ON exam_records(subject_id)"),
                 QStringLiteral("CREATE INDEX IF NOT EXISTS idx_exam_records_type ON exam_records(exam_type)"),
+
+                // ---- settings ----------------------------------------------------
+                QStringLiteral(R"(CREATE TABLE IF NOT EXISTS settings (
+                    key   TEXT PRIMARY KEY NOT NULL,
+                    value TEXT NOT NULL DEFAULT ''
+                ))"),
+            },
+        },
+        {
+            3,
+            QStringLiteral("student profile: entry stage and enrolment year"),
+            {
+                // The student's stage and the year they entered it replace the
+                // old 学号 / 班级 columns; the grade is derived at display time
+                // from these two values and the current date.
+                QStringLiteral(
+                    "ALTER TABLE student_profile ADD COLUMN stage TEXT NOT NULL DEFAULT ''"),
+                QStringLiteral(
+                    "ALTER TABLE student_profile ADD COLUMN enrollment_year INTEGER NOT NULL "
+                    "DEFAULT 0"),
             },
         },
     };

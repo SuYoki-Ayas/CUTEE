@@ -15,6 +15,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QShortcut>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -67,6 +68,10 @@ LogPage::LogPage(QWidget *parent)
         else
             m_timer->stop();
     });
+
+    auto *refreshShortcut = new QShortcut(QKeySequence(Qt::Key_F5), this);
+    refreshShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(refreshShortcut, &QShortcut::activated, this, &LogPage::refresh);
 
     refresh();
 }

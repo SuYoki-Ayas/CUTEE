@@ -1,5 +1,6 @@
 ﻿#include <QtTest>
 
+#include <QDate>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QTemporaryDir>
@@ -9,7 +10,6 @@
 #include "storage/Migrations.h"
 #include "storage/SettingsRepository.h"
 #include "storage/StudentProfileRepository.h"
-#include "service/LegacyDataService.h"
 
 using namespace cutee;
 
@@ -23,8 +23,8 @@ private slots:
     void migrationIsIdempotent();
     void settingsRoundTrip();
     void singleProfileIsUpserted();
-    void legacyStudentsArePreserved();
-    void legacyCleanupKeepsNewData();
+    void profileStageColumnsAcceptLegacyRows();
+    void legacyVersionUpgradesWithoutOldTables();
     void foreignKeysAreEnforced();
 
 private:
@@ -51,19 +51,12 @@ void TestDatabase::migrationCreatesSchema()
     auto migrated = database.migrate();
     QVERIFY2(migrated.ok(), qPrintable(migrated.errorMessage()));
     QCOMPARE(database.schemaVersion(), targetSchemaVersion());
-    QCOMPARE(database.schemaVersion(), 2);
+    QCOMPARE(database.schemaVersion(), 3);
 
     const QStringList expectedTables = {
-        // New single-student schema.
         QStringLiteral("student_profile"), QStringLiteral("subjects"),
-        QStringLiteral("exam_records"),
-        // Legacy tables are kept and must not be dropped.
-        QStringLiteral("students"),      QStringLiteral("questions"),
-        QStringLiteral("exams"),         QStringLiteral("exam_questions"),
-        QStringLiteral("exam_students"), QStringLiteral("answers"),
-        QStringLiteral("submissions"),   QStringLiteral("scores"),
-        // Shared infrastructure.
-        QStringLiteral("settings"), QStringLiteral("schema_version"),
+        QStringLiteral("exam_records"), QStringLiteral("settings"),
+        QStringLiteral("schema_version"),
     };
 
     for (const QString &table : expectedTables) {
@@ -74,6 +67,26 @@ void TestDatabase::migrationCreatesSchema()
         QVERIFY2(query.exec(), qPrintable(query.lastError().text()));
         QVERIFY2(query.next(), qPrintable(QStringLiteral("缺少数据表 %1").arg(table)));
     }
+
+    // The retired multi-student tables must no longer be created.
+    for (const QString &table : {QStringLiteral("students"), QStringLiteral("questions"),
+                                 QStringLiteral("exams"), QStringLiteral("scores")}) {
+        QSqlQuery query(database.connection());
+        query.prepare(QStringLiteral(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"));
+        query.addBindValue(table);
+        QVERIFY(query.exec());
+        QVERIFY2(!query.next(), qPrintable(QStringLiteral("不应再创建旧表 %1").arg(table)));
+    }
+
+    // v3 replaced 学号 / 班级 with the entry stage and its enrolment year.
+    QSqlQuery columns(database.connection());
+    QVERIFY(columns.exec(QStringLiteral("PRAGMA table_info(student_profile)")));
+    QStringList names;
+    while (columns.next())
+        names.append(columns.value(1).toString());
+    QVERIFY(names.contains(QStringLiteral("stage")));
+    QVERIFY(names.contains(QStringLiteral("enrollment_year")));
 }
 
 void TestDatabase::migrationIsIdempotent()
@@ -121,19 +134,26 @@ void TestDatabase::singleProfileIsUpserted()
 
     StudentProfile profile;
     profile.name = QStringLiteral("张三");
-    profile.studentNo = QStringLiteral("S001");
-    profile.schoolClass = QStringLiteral("高一（1）班");
+    profile.stage = SchoolStage::Senior;
+    profile.enrollmentYear = 2024;
+    profile.targetSchool = QStringLiteral("华中师大一附中");
     QVERIFY(profiles.save(profile).ok());
     QVERIFY(profiles.exists().value());
 
     StudentProfile edited;
     edited.name = QStringLiteral("张三丰");
+    edited.stage = SchoolStage::Senior;
+    edited.enrollmentYear = 2024;
+    edited.targetSchool = QStringLiteral("华中师大一附中");
     QVERIFY(profiles.save(edited).ok());
 
     auto loaded = profiles.load();
     QVERIFY(loaded.ok());
     QVERIFY(loaded.value().has_value());
     QCOMPARE(loaded.value()->name, QStringLiteral("张三丰"));
+    QCOMPARE(loaded.value()->stage, SchoolStage::Senior);
+    QCOMPARE(loaded.value()->enrollmentYear, 2024);
+    QCOMPARE(loaded.value()->targetSchool, QStringLiteral("华中师大一附中"));
     QVERIFY(loaded.value()->createdAt.isValid());
 
     QSqlQuery count(database.connection());
@@ -146,99 +166,53 @@ void TestDatabase::singleProfileIsUpserted()
         "INSERT INTO student_profile (id, name, updated_at) VALUES (2, '第二个学生', '')")));
 }
 
-void TestDatabase::legacyStudentsArePreserved()
+/// Rows written before v3 have no stage / enrolment year; they must still load
+/// and simply report "未填写学段" until the profile is edited.
+void TestDatabase::profileStageColumnsAcceptLegacyRows()
 {
-    const QString path = freshPath(QStringLiteral("legacy"));
-    Database database(QStringLiteral("test-legacy"));
+    Database database(QStringLiteral("test-legacy-profile"));
+    QVERIFY(database.open(freshPath(QStringLiteral("legacy-profile"))).ok());
+    QVERIFY(database.migrate().ok());
+
+    QVERIFY(db::execute(database.connection(),
+                        QStringLiteral("INSERT INTO student_profile "
+                                       "(id, name, student_no, school_class, note) "
+                                       "VALUES (1, '旧学生', 'S001', '高二（1）班', '')"))
+                .ok());
+
+    StudentProfileRepository profiles(database);
+    auto loaded = profiles.load();
+    QVERIFY(loaded.ok());
+    QVERIFY(loaded.value().has_value());
+    QCOMPARE(loaded.value()->name, QStringLiteral("旧学生"));
+    QCOMPARE(loaded.value()->enrollmentYear, 0);
+    QVERIFY(!resolveGrade(loaded.value()->stage, loaded.value()->enrollmentYear, QDate(2026, 3, 1))
+                 .known);
+}
+
+/// An existing installation that still reports schema v1 (the retired
+/// multi-student schema) must upgrade to the current schema without the legacy
+/// tables being required and without auto-creating a profile.
+void TestDatabase::legacyVersionUpgradesWithoutOldTables()
+{
+    const QString path = freshPath(QStringLiteral("upgrade-v1"));
+    Database database(QStringLiteral("test-upgrade-v1"));
     QVERIFY(database.open(path).ok());
 
-    // Build a v1 database by hand, then seed two legacy students.
     QVERIFY(db::execute(database.connection(),
                         QStringLiteral("CREATE TABLE schema_version (version INTEGER NOT NULL)"))
                 .ok());
-    for (const Migration &migration : migrations()) {
-        if (migration.version > 1)
-            break;
-        for (const QString &statement : migration.statements)
-            QVERIFY2(db::execute(database.connection(), statement).ok(), qPrintable(statement));
-    }
     QVERIFY(db::execute(database.connection(), QStringLiteral("INSERT INTO schema_version VALUES (1)"))
-                .ok());
-    QVERIFY(db::execute(
-                database.connection(),
-                QStringLiteral("INSERT INTO students (id, name, student_no, class_name, note, created_at, updated_at) "
-                               "VALUES (?, ?, ?, ?, ?, ?, ?)"),
-                {QStringLiteral("s1"), QStringLiteral("第一位"), QStringLiteral("A001"),
-                 QStringLiteral("高一（1）班"), QStringLiteral("旧备注"),
-                 QStringLiteral("2024-09-01T00:00:00Z"), QStringLiteral("2024-09-01T00:00:00Z")})
-                .ok());
-    QVERIFY(db::execute(
-                database.connection(),
-                QStringLiteral("INSERT INTO students (id, name, student_no, class_name, note, created_at, updated_at) "
-                               "VALUES (?, ?, ?, ?, ?, ?, ?)"),
-                {QStringLiteral("s2"), QStringLiteral("第二位"), QStringLiteral("A002"),
-                 QStringLiteral("高一（2）班"), QString(),
-                 QStringLiteral("2024-10-01T00:00:00Z"), QStringLiteral("2024-10-01T00:00:00Z")})
                 .ok());
 
     auto migrated = database.migrate();
     QVERIFY2(migrated.ok(), qPrintable(migrated.errorMessage()));
-    QCOMPARE(database.schemaVersion(), 2);
+    QCOMPARE(database.schemaVersion(), targetSchemaVersion());
 
-    // Old rows are still there, nothing was deleted.
-    QSqlQuery countQuery(database.connection());
-    QVERIFY(countQuery.exec(QStringLiteral("SELECT COUNT(*) FROM students")));
-    QVERIFY(countQuery.next());
-    QCOMPARE(countQuery.value(0).toInt(), 2);
-
-    // The earliest legacy student became the single current profile.
-    QSqlQuery profile(database.connection());
-    QVERIFY(profile.exec(QStringLiteral(
-        "SELECT name, student_no, school_class, note FROM student_profile WHERE id = 1")));
-    QVERIFY(profile.next());
-    QCOMPARE(profile.value(0).toString(), QStringLiteral("第一位"));
-    QCOMPARE(profile.value(1).toString(), QStringLiteral("A001"));
-    QCOMPARE(profile.value(2).toString(), QStringLiteral("高一（1）班"));
-    QCOMPARE(profile.value(3).toString(), QStringLiteral("旧备注"));
-}
-
-void TestDatabase::legacyCleanupKeepsNewData()
-{
-    Database database(QStringLiteral("test-legacy-cleanup"));
-    QVERIFY(database.open(freshPath(QStringLiteral("legacy-cleanup"))).ok());
-    QVERIFY(database.migrate().ok());
-
-    QVERIFY(db::execute(database.connection(),
-                        QStringLiteral("INSERT INTO students (id, name, student_no, class_name, note, "
-                                       "created_at, updated_at) VALUES ('s1', '旧学生', '', '', '', '', '')"))
-                .ok());
-    QVERIFY(db::execute(database.connection(),
-                        QStringLiteral("INSERT INTO subjects (name, type, sort_order, enabled, note, "
-                                       "created_at, updated_at) VALUES ('数学', 'ACADEMIC', 1, 1, '', '', '')"))
-                .ok());
-    QVERIFY(db::execute(database.connection(),
-                        QStringLiteral("INSERT INTO student_profile (id, name, updated_at) "
-                                       "VALUES (1, '当前学生', '')"))
-                .ok());
-
-    LegacyDataService legacy(database);
-    auto stats = legacy.stats();
-    QVERIFY(stats.ok());
-    QCOMPARE(stats.value().students, 1);
-    QCOMPARE(stats.value().totalRows(), 1);
-
-    QVERIFY(legacy.clear().ok());
-
-    auto cleared = legacy.stats();
-    QVERIFY(cleared.ok());
-    QCOMPARE(cleared.value().totalRows(), 0);
-
-    QSqlQuery newData(database.connection());
-    QVERIFY(newData.exec(QStringLiteral(
-        "SELECT (SELECT COUNT(*) FROM subjects), (SELECT COUNT(*) FROM student_profile)")));
-    QVERIFY(newData.next());
-    QCOMPARE(newData.value(0).toInt(), 1);
-    QCOMPARE(newData.value(1).toInt(), 1);
+    QSqlQuery profileCount(database.connection());
+    QVERIFY(profileCount.exec(QStringLiteral("SELECT COUNT(*) FROM student_profile")));
+    QVERIFY(profileCount.next());
+    QCOMPARE(profileCount.value(0).toInt(), 0);
 }
 
 void TestDatabase::foreignKeysAreEnforced()

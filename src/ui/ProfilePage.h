@@ -6,9 +6,10 @@
 #include "storage/StudentProfileRepository.h"
 
 class QLabel;
+class QComboBox;
 class QLineEdit;
-class QPlainTextEdit;
 class QPushButton;
+class QSpinBox;
 
 namespace cutee {
 
@@ -34,22 +35,32 @@ private:
     void save();
     void resetForm();
     void setBanner(bool firstRun);
+    void updateActionState();
+    void updateGradeHint();
+    void undoLastChange();
+    StudentProfile currentFormValues() const;
 
     StudentProfileRepository m_repository;
 
     QLabel *m_banner = nullptr;
     QLabel *m_meta = nullptr;
     QLabel *m_error = nullptr;
-    QLabel *m_feedback = nullptr;
+    QLabel *m_gradeHint = nullptr;
     QLineEdit *m_name = nullptr;
-    QLineEdit *m_studentNo = nullptr;
-    QLineEdit *m_schoolClass = nullptr;
-    QPlainTextEdit *m_note = nullptr;
+    QComboBox *m_stage = nullptr;
+    QSpinBox *m_enrollmentYear = nullptr;
+    QLineEdit *m_goal = nullptr;
     QPushButton *m_saveButton = nullptr;
     QPushButton *m_resetButton = nullptr;
 
     bool m_hasProfile = false;
+    /// Guards the "dirty" detection while the form is filled programmatically.
+    bool m_updatingForm = false;
+    /// Last value stored in the database; the form is "clean" when it matches.
     StudentProfile m_loaded;
+    /// Values captured right before the last successful save, used by 撤销修改.
+    StudentProfile m_previous;
+    bool m_canUndoLastSave = false;
 };
 
 } // namespace cutee

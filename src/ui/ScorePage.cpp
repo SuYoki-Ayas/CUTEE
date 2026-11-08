@@ -8,24 +8,30 @@
 #include "ui/ScoreDialog.h"
 #include "ui/UiKit.h"
 
+#include <QAction>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDateEdit>
 #include <QDir>
 #include <QDebug>
-#include <QElapsedTimer>
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSet>
+#include <QShortcut>
+#include <QSignalBlocker>
 #include <QStackedWidget>
 #include <QStandardPaths>
 #include <QTableView>
 #include <QTimer>
+#include <QUuid>
 #include <QVBoxLayout>
+#include <QtConcurrent>
 
 #include <utility>
 
@@ -35,15 +41,60 @@ namespace {
 constexpr int kKeywordDelayMs = 180;
 constexpr int kRowHeight = 28;
 
+ScoreLoadOutcome runScoreLoad(const QString &databasePath)
+{
+    ScoreLoadOutcome outcome;
+
+    Database database(QStringLiteral("cutee_scores_%1")
+                          .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+    auto opened = database.open(databasePath);
+    if (!opened) {
+        outcome.error = opened.errorMessage();
+        return outcome;
+    }
+
+    ScoreService service(database);
+    auto result = service.list(ExamRecordFilter{});
+    if (!result) {
+        outcome.error = result.errorMessage();
+        return outcome;
+    }
+
+    outcome.records = result.value();
+    outcome.ok = true;
+    return outcome;
+}
+
 } // namespace
 
 ScorePage::ScorePage(Database &database, QWidget *parent)
     : QWidget(parent)
     , m_service(database)
+    , m_database(database)
+    , m_settings(database)
 {
     m_model = new ScoreTableModel(this);
     m_proxy = new ScoreFilterProxyModel(this);
     m_proxy->setSourceModel(m_model);
+
+    m_watcher = new QFutureWatcher<ScoreLoadOutcome>(this);
+    connect(m_watcher, &QFutureWatcher<ScoreLoadOutcome>::finished, this, [this] {
+        m_loading = false;
+        const ScoreLoadOutcome outcome = m_watcher->result();
+        if (!outcome.ok) {
+            QMessageBox::critical(this, QStringLiteral("读取失败"), outcome.error);
+        } else {
+            const ExamRecord current = selectedRecord();
+            m_model->setRecords(outcome.records);
+            if (current.id > 0)
+                selectRecord(current.id);
+            applyFilters();
+            qDebug().noquote()
+                << QStringLiteral("成绩列表刷新：%1 条").arg(outcome.records.size());
+        }
+        if (m_pending)
+            reload();
+    });
 
     m_keywordTimer = new QTimer(this);
     m_keywordTimer->setSingleShot(true);
@@ -53,7 +104,7 @@ ScorePage::ScorePage(Database &database, QWidget *parent)
 
     layout->addWidget(ui::makePageTitle(QStringLiteral("成绩管理"), this));
     layout->addWidget(ui::makePageDescription(
-        QStringLiteral("记录这位学生的每次 OI 竞赛与文化课考试成绩。得分率 = 得分 ÷ 满分，"
+        QStringLiteral("记录您的每次 OI 竞赛与文化课考试成绩，"
                        "列表默认按考试日期倒序；点击表头可切换排序。"),
         this));
     layout->addWidget(buildFilterBar());
@@ -97,6 +148,28 @@ ScorePage::ScorePage(Database &database, QWidget *parent)
         if (index.isValid())
             editSelected();
     });
+
+    buildColumnsMenu();
+    applyColumnVisibility();
+
+    auto *newShortcut = new QShortcut(QKeySequence::New, this);
+    newShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(newShortcut, &QShortcut::activated, this, &ScorePage::createRecord);
+    auto *exportShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+E")), this);
+    exportShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(exportShortcut, &QShortcut::activated, this, &ScorePage::exportCsv);
+    auto *findShortcut = new QShortcut(QKeySequence::Find, this);
+    findShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(findShortcut, &QShortcut::activated, this, [this] {
+        m_keyword->setFocus();
+        m_keyword->selectAll();
+    });
+    auto *editShortcut = new QShortcut(QKeySequence(Qt::Key_F2), m_table);
+    editShortcut->setContext(Qt::WidgetShortcut);
+    connect(editShortcut, &QShortcut::activated, this, &ScorePage::editSelected);
+    auto *deleteShortcut = new QShortcut(QKeySequence::Delete, m_table);
+    deleteShortcut->setContext(Qt::WidgetShortcut);
+    connect(deleteShortcut, &QShortcut::activated, this, &ScorePage::removeRecord);
 
     reloadSubjects();
     reload();
@@ -159,12 +232,16 @@ QWidget *ScorePage::buildActionBar()
     m_editButton = ui::makeButton(QStringLiteral("编辑"), bar);
     m_deleteButton = ui::makeDangerButton(QStringLiteral("删除"), bar);
     m_exportButton = ui::makeButton(QStringLiteral("导出明细 CSV"), bar);
+    m_exportButton->setToolTip(QStringLiteral("导出明细 CSV（Ctrl+E）"));
+    m_columnsButton = ui::makeButton(QStringLiteral("列"), bar);
+    m_columnsButton->setToolTip(QStringLiteral("显示或隐藏表格列"));
     auto *refreshButton = ui::makeButton(QStringLiteral("刷新"), bar);
 
     row->addWidget(m_keyword, 1);
     row->addWidget(m_addButton);
     row->addWidget(m_editButton);
     row->addWidget(m_deleteButton);
+    row->addWidget(m_columnsButton);
     row->addWidget(m_exportButton);
     row->addWidget(refreshButton);
 
@@ -297,22 +374,15 @@ void ScorePage::reloadSubjects()
 
 void ScorePage::reload()
 {
-    QElapsedTimer timer;
-    timer.start();
-    auto result = m_service.list(ExamRecordFilter{});
-    if (!result) {
-        QMessageBox::critical(this, QStringLiteral("读取失败"), result.errorMessage());
+    if (m_loading) {
+        m_pending = true;
         return;
     }
 
-    const ExamRecord current = selectedRecord();
-    m_model->setRecords(result.value());
-    if (current.id > 0)
-        selectRecord(current.id);
-    applyFilters();
-    qDebug().noquote() << QStringLiteral("成绩列表刷新：%1 条，耗时 %2 ms")
-                              .arg(result.value().size())
-                              .arg(timer.elapsed());
+    m_loading = true;
+    m_pending = false;
+    const QString path = m_database.filePath();
+    m_watcher->setFuture(QtConcurrent::run([path] { return runScoreLoad(path); }));
 }
 
 void ScorePage::applyFilters()
@@ -563,6 +633,79 @@ QVector<ExamRecord> ScorePage::visibleRecords() const
         records.append(m_model->recordAt(sourceIndex.row()));
     }
     return records;
+}
+
+void ScorePage::buildColumnsMenu()
+{
+    if (!m_columnsButton)
+        return;
+
+    m_columnsMenu = new QMenu(m_columnsButton);
+    for (int column = 0; column < ScoreTableModel::ColumnCount; ++column) {
+        const QString label = m_model->headerData(column, Qt::Horizontal).toString();
+        auto *action = m_columnsMenu->addAction(label);
+        action->setCheckable(true);
+        action->setChecked(true);
+        connect(action, &QAction::toggled, this, [this, column](bool checked) {
+            if (!m_table)
+                return;
+            m_table->setColumnHidden(column, !checked);
+            saveColumnVisibility();
+        });
+        m_columnActions.append(action);
+    }
+
+    m_columnsMenu->addSeparator();
+    m_columnsMenu->addAction(QStringLiteral("显示全部列"), this, [this] {
+        for (int column = 0; column < m_columnActions.size(); ++column) {
+            QAction *action = m_columnActions.at(column);
+            if (!action->isChecked()) {
+                const QSignalBlocker blocker(action);
+                action->setChecked(true);
+                m_table->setColumnHidden(column, false);
+            }
+        }
+        saveColumnVisibility();
+    });
+    m_columnsButton->setMenu(m_columnsMenu);
+}
+
+void ScorePage::applyColumnVisibility()
+{
+    if (!m_table || m_columnActions.isEmpty())
+        return;
+
+    QSet<int> hidden;
+    const auto stored = m_settings.value(QLatin1String(settings::kScoreHiddenColumns));
+    if (stored.ok()) {
+        const QStringList parts = stored.value().split(QLatin1Char(','), Qt::SkipEmptyParts);
+        for (const QString &part : parts) {
+            bool ok = false;
+            const int column = part.trimmed().toInt(&ok);
+            if (ok && column >= 0 && column < ScoreTableModel::ColumnCount)
+                hidden.insert(column);
+        }
+    }
+
+    for (int column = 0; column < m_columnActions.size(); ++column) {
+        const bool visible = !hidden.contains(column);
+        const QSignalBlocker blocker(m_columnActions.at(column));
+        m_columnActions.at(column)->setChecked(visible);
+        m_table->setColumnHidden(column, !visible);
+    }
+}
+
+void ScorePage::saveColumnVisibility()
+{
+    if (!m_table)
+        return;
+
+    QStringList hidden;
+    for (int column = 0; column < ScoreTableModel::ColumnCount; ++column) {
+        if (m_table->isColumnHidden(column))
+            hidden.append(QString::number(column));
+    }
+    m_settings.setValue(QLatin1String(settings::kScoreHiddenColumns), hidden.join(QLatin1Char(',')));
 }
 
 } // namespace cutee

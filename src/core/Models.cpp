@@ -1,4 +1,4 @@
-﻿#include "core/Models.h"
+#include "core/Models.h"
 
 namespace cutee {
 namespace {
@@ -55,9 +55,7 @@ QStringList examTypeFilterLabels()
 
 QString StudentProfile::displayName() const
 {
-    if (studentNo.trimmed().isEmpty())
-        return name;
-    return QStringLiteral("%1 (%2)").arg(name, studentNo);
+    return name.trimmed();
 }
 
 } // namespace cutee

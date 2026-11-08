@@ -15,6 +15,8 @@ public:
     static QString databaseFile();
     static QString logDirectory();
     static QString logFile();
+    /// Snapshots created by import/reset and by manual export live here.
+    static QString backupDirectory();
 };
 
 } // namespace cutee

@@ -66,9 +66,9 @@ private slots:
         const QModelIndex exact = model.index(1, cutee::ScoreTableModel::RateColumn);
         const QModelIndex over = model.index(2, cutee::ScoreTableModel::RateColumn);
 
-        QCOMPARE(low.data(Qt::ForegroundRole).value<QColor>(), QColor(QStringLiteral("#b54708")));
-        QCOMPARE(exact.data(Qt::ForegroundRole).value<QColor>(), QColor(QStringLiteral("#1f2933")));
-        QCOMPARE(over.data(Qt::ForegroundRole).value<QColor>(), QColor(QStringLiteral("#b42318")));
+        QCOMPARE(low.data(Qt::ForegroundRole).value<QColor>(), QColor(QStringLiteral("#6E6420")));
+        QCOMPARE(exact.data(Qt::ForegroundRole).value<QColor>(), QColor(QStringLiteral("#2F2C36")));
+        QCOMPARE(over.data(Qt::ForegroundRole).value<QColor>(), QColor(QStringLiteral("#8B3E3E")));
     }
 
     void exposesNumericSortValues()

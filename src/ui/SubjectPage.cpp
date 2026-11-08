@@ -3,11 +3,12 @@
 #include "core/TimeUtils.h"
 #include "storage/Database.h"
 #include "storage/SubjectRepository.h"
+#include "ui/Palette.h"
 #include "ui/SubjectDialog.h"
+#include "ui/TagDelegate.h"
 #include "ui/UiKit.h"
 
 #include <QCheckBox>
-#include <QColor>
 #include <QComboBox>
 #include <QFont>
 #include <QHBoxLayout>
@@ -15,6 +16,7 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QShortcut>
 #include <QTableWidget>
 #include <QVBoxLayout>
 
@@ -98,12 +100,16 @@ SubjectPage::SubjectPage(Database &database, QWidget *parent)
     m_table->horizontalHeader()->setHighlightSections(false);
     m_table->horizontalHeader()->setStretchLastSection(false);
     m_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    m_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    m_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
+    m_table->horizontalHeader()->resizeSection(1, 92);
+    m_table->horizontalHeader()->resizeSection(2, 84);
     m_table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     m_table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
     m_table->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
     m_table->horizontalHeader()->setSectionResizeMode(6, QHeaderView::ResizeToContents);
+    m_table->setItemDelegateForColumn(1, new ui::TagDelegate(m_table));
+    m_table->setItemDelegateForColumn(2, new ui::TagDelegate(m_table));
     layout->addWidget(m_table, 1);
 
     m_summary = ui::makeStatusLabel(this);
@@ -124,6 +130,16 @@ SubjectPage::SubjectPage(Database &database, QWidget *parent)
         if (item && item->row() >= 0)
             editSelected();
     });
+
+    auto *newShortcut = new QShortcut(QKeySequence::New, this);
+    newShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(newShortcut, &QShortcut::activated, this, &SubjectPage::createSubject);
+    auto *editShortcut = new QShortcut(QKeySequence(Qt::Key_F2), m_table);
+    editShortcut->setContext(Qt::WidgetShortcut);
+    connect(editShortcut, &QShortcut::activated, this, &SubjectPage::editSelected);
+    auto *deleteShortcut = new QShortcut(QKeySequence::Delete, m_table);
+    deleteShortcut->setContext(Qt::WidgetShortcut);
+    connect(deleteShortcut, &QShortcut::activated, this, &SubjectPage::removeSelected);
 
     reload();
 }
@@ -151,12 +167,16 @@ void SubjectPage::reload()
         auto *nameItem = readOnlyItem(subject.name);
         nameItem->setData(kIdRole, subject.id);
         if (!subject.enabled)
-            nameItem->setForeground(QColor(QStringLiteral("#98a2b3")));
+            nameItem->setForeground(palette::color(palette::kTextMuted));
         m_table->setItem(row, 0, nameItem);
 
         auto *typeItem = readOnlyItem(examTypeDisplayName(subject.type));
-        typeItem->setForeground(QColor(subject.type == ExamType::Oi ? QStringLiteral("#1d4ed8")
-                                                                    : QStringLiteral("#475467")));
+        typeItem->setForeground(palette::color(subject.type == ExamType::Oi
+                                                   ? palette::kTextOnBlue
+                                                   : palette::kTextOnLime));
+        typeItem->setBackground(palette::color(subject.type == ExamType::Oi
+                                                   ? palette::kBlue
+                                                   : palette::kLime));
         typeItem->setToolTip(subject.type == ExamType::Oi
                                  ? QStringLiteral("OI 竞赛科目")
                                  : QStringLiteral("文化课科目"));
@@ -164,15 +184,17 @@ void SubjectPage::reload()
 
         auto *stateItem = readOnlyItem(subject.enabled ? QStringLiteral("启用")
                                                        : QStringLiteral("已停用"));
-        stateItem->setForeground(QColor(subject.enabled ? QStringLiteral("#1f7a3f")
-                                                        : QStringLiteral("#98a2b3")));
+        stateItem->setForeground(palette::color(subject.enabled ? palette::kTextOnGreen
+                                                                : palette::kTextMuted));
+        if (subject.enabled)
+            stateItem->setBackground(palette::color(palette::kGreen));
         m_table->setItem(row, 2, stateItem);
 
         const int references = m_referenceCounts.value(subject.id, 0);
         auto *referenceItem = readOnlyItem(QString::number(references));
         referenceItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
         if (references == 0)
-            referenceItem->setForeground(QColor(QStringLiteral("#98a2b3")));
+            referenceItem->setForeground(palette::color(palette::kTextMuted));
         m_table->setItem(row, 3, referenceItem);
 
         auto *orderItem = readOnlyItem(QString::number(subject.sortOrder));

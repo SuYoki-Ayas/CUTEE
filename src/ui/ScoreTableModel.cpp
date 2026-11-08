@@ -1,15 +1,12 @@
 #include "ui/ScoreTableModel.h"
 
 #include "core/ScoreValue.h"
+#include "ui/Palette.h"
 
 #include <QColor>
 
 namespace cutee {
 namespace {
-
-constexpr char kTextColor[] = "#1f2933";
-constexpr char kLowRateColor[] = "#b54708";
-constexpr char kInvalidScoreColor[] = "#b42318";
 
 const QStringList &headerLabels()
 {
@@ -88,12 +85,12 @@ QVariant ScoreTableModel::data(const QModelIndex &index, int role) const
         }
     case Qt::ForegroundRole:
         if (record.fullScoreHundredths > 0 && record.scoreHundredths > record.fullScoreHundredths)
-            return QColor(QString::fromLatin1(kInvalidScoreColor));
+            return palette::color(palette::kTextOnPink);
         if (column == RateColumn && record.fullScoreHundredths > 0
             && scoreutil::rateOf(record.scoreHundredths, record.fullScoreHundredths)
                 < kLowRateThreshold)
-            return QColor(QString::fromLatin1(kLowRateColor));
-        return QColor(QString::fromLatin1(kTextColor));
+            return palette::color(palette::kTextOnLime);
+        return palette::color(palette::kTextPrimary);
     case Qt::ToolTipRole:
         if (column == RateColumn && record.scoreHundredths > record.fullScoreHundredths)
             return QStringLiteral("得分高于满分，请核对这条记录");

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <QDate>
 #include <QDateTime>
@@ -7,6 +7,8 @@
 #include <QVector>
 
 #include <optional>
+
+#include "core/SchoolStage.h"
 
 namespace cutee {
 
@@ -26,9 +28,13 @@ QStringList examTypeFilterLabels();
 struct StudentProfile
 {
     QString name;
-    QString studentNo;
-    QString schoolClass;
-    QString note;
+    /// Stage the student entered in `enrollmentYear`; the current grade is
+    /// derived from it (see core/SchoolStage.h) and never stored.
+    SchoolStage stage = SchoolStage::Junior;
+    /// Calendar year the student started `stage`; 0 means "not filled in yet".
+    int enrollmentYear = 0;
+    /// 目标院校 (kept in the legacy `note` column, no schema change).
+    QString targetSchool;
     QDateTime createdAt;
     QDateTime updatedAt;
 

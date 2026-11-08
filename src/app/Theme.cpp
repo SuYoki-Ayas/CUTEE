@@ -1,5 +1,7 @@
 #include "app/Theme.h"
 
+#include "ui/Palette.h"
+
 #include <QApplication>
 #include <QColor>
 #include <QDebug>
@@ -18,42 +20,43 @@ namespace {
 
 QColor color(const char *hex)
 {
-    return QColor(QString::fromLatin1(hex));
+    return palette::color(hex);
 }
 
 /// Explicit light palette so a Windows dark mode setting cannot produce white
-/// text on white inputs.
+/// text on white inputs. Accent surfaces come from the five brand pastels.
 QPalette lightPalette()
 {
-    QPalette palette;
-    palette.setColor(QPalette::Window, color("#f5f6f8"));
-    palette.setColor(QPalette::WindowText, color("#1f2933"));
-    palette.setColor(QPalette::Base, color("#ffffff"));
-    palette.setColor(QPalette::AlternateBase, color("#fafbfc"));
-    palette.setColor(QPalette::Text, color("#1f2933"));
-    palette.setColor(QPalette::Button, color("#ffffff"));
-    palette.setColor(QPalette::ButtonText, color("#344054"));
-    palette.setColor(QPalette::BrightText, color("#ffffff"));
-    palette.setColor(QPalette::Highlight, color("#2f6fed"));
-    palette.setColor(QPalette::HighlightedText, color("#ffffff"));
-    palette.setColor(QPalette::ToolTipBase, color("#1f2930"));
-    palette.setColor(QPalette::ToolTipText, color("#ffffff"));
-    palette.setColor(QPalette::PlaceholderText, color("#98a2b3"));
-    palette.setColor(QPalette::Link, color("#2f6fed"));
-    palette.setColor(QPalette::Mid, color("#d0d5dd"));
-    palette.setColor(QPalette::Midlight, color("#e4e7ec"));
-    palette.setColor(QPalette::Dark, color("#98a2b3"));
-    palette.setColor(QPalette::Light, color("#ffffff"));
-    palette.setColor(QPalette::Shadow, color("#667085"));
+    QPalette p;
+    p.setColor(QPalette::Window, color(palette::kCanvas));
+    p.setColor(QPalette::WindowText, color(palette::kTextPrimary));
+    p.setColor(QPalette::Base, color(palette::kSurface));
+    p.setColor(QPalette::AlternateBase, color(palette::kSurfaceAlt));
+    p.setColor(QPalette::Text, color(palette::kTextPrimary));
+    p.setColor(QPalette::Button, color(palette::kSurface));
+    p.setColor(QPalette::ButtonText, color("#4A4655"));
+    p.setColor(QPalette::BrightText, color("#FFFFFF"));
+    p.setColor(QPalette::Highlight, color(palette::kPurple));
+    p.setColor(QPalette::HighlightedText, color("#3A2E5C"));
+    p.setColor(QPalette::ToolTipBase, color(palette::kInk));
+    p.setColor(QPalette::ToolTipText, color("#FFFFFF"));
+    p.setColor(QPalette::PlaceholderText, color(palette::kTextMuted));
+    p.setColor(QPalette::Link, color("#7A63B8"));
+    p.setColor(QPalette::LinkVisited, color("#5C4A8C"));
+    p.setColor(QPalette::Mid, color(palette::kBorder));
+    p.setColor(QPalette::Midlight, color("#E4E0EC"));
+    p.setColor(QPalette::Dark, color("#B3AAC4"));
+    p.setColor(QPalette::Light, color("#FFFFFF"));
+    p.setColor(QPalette::Shadow, color(palette::kTextSecondary));
 
-    palette.setColor(QPalette::Disabled, QPalette::WindowText, color("#98a2b3"));
-    palette.setColor(QPalette::Disabled, QPalette::Text, color("#98a2b3"));
-    palette.setColor(QPalette::Disabled, QPalette::ButtonText, color("#98a2b3"));
-    palette.setColor(QPalette::Disabled, QPalette::Base, color("#f2f4f7"));
-    palette.setColor(QPalette::Disabled, QPalette::Button, color("#f2f4f7"));
-    palette.setColor(QPalette::Disabled, QPalette::Highlight, color("#d7e2f8"));
-    palette.setColor(QPalette::Disabled, QPalette::HighlightedText, color("#98a2b3"));
-    return palette;
+    p.setColor(QPalette::Disabled, QPalette::WindowText, color("#A9A2B6"));
+    p.setColor(QPalette::Disabled, QPalette::Text, color("#A9A2B6"));
+    p.setColor(QPalette::Disabled, QPalette::ButtonText, color("#A9A2B6"));
+    p.setColor(QPalette::Disabled, QPalette::Base, color("#F2F0F6"));
+    p.setColor(QPalette::Disabled, QPalette::Button, color("#F2F0F6"));
+    p.setColor(QPalette::Disabled, QPalette::Highlight, color("#EFEAF8"));
+    p.setColor(QPalette::Disabled, QPalette::HighlightedText, color("#A9A2B6"));
+    return p;
 }
 
 } // namespace
