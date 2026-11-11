@@ -63,4 +63,4 @@ ctest --preset local-msvc
 
 - **Qt 6**（Widgets / Sql / Concurrent / Gui / Core）采用  GPLv3 许可。
 - **Qt Graphs** 与 **Qt Quick / QML**（成绩趋势图使用）采用 GPLv3 许可。
-- **SQLite** 为公有领域（Public Domain）。
+- **SQLite** 为 Public Domain。
