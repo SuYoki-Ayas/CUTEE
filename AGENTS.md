@@ -20,7 +20,7 @@ ctest --test-dir build --output-on-failure
 # MinGW（验证构建；ctest 需要 Qt 在 PATH 中）
 $env:QTDIR = 'D:\Qt\6.11.1\mingw_64'
 $env:MINGW_BIN = 'D:\Qt\Tools\mingw1310_64\bin'
-$env:NINJA_DIR = '<dir containing ninja.exe>'
+$env:NINJA_DIR = 'D:\msys2\ucrt64\bin'
 $env:PATH = "$env:QTDIR\bin;$env:MINGW_BIN;$env:PATH"
 cmake --preset windows-mingw
 cmake --build --preset windows-mingw
@@ -29,6 +29,16 @@ ctest --test-dir build-mingw --output-on-failure
 
 - 便携/测试数据目录：设置环境变量 `CUTEE_DATA_DIR`。
 - 无 `QTDIR` 时 MSVC 预设无法配置；MinGW 预设还依赖 `MINGW_BIN`、`NINJA_DIR`。
+- **构建工具统一来自 MSYS2**：`cmake` / `ctest` / `cpack` / `ninja` 都取 `D:\MSYS2\ucrt64\bin`
+  （`pacman -S mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja`），不再使用 Python 目录下的 pip 版 cmake。
+  `ninja` 依赖同目录的 `libgcc_s_seh-1.dll` / `libstdc++-6.dll`，因此以**绝对路径**引用（`CMAKE_MAKE_PROGRAM`）。
+- **编译器仍用 Qt 自带的 MinGW 13.1**（`D:\Qt\Tools\mingw1310_64`）。Qt 6.11 的 `mingw_64` 二进制链接
+  `msvcrt.dll`，而 MSYS2 UCRT64 的 gcc 16 走 UCRT，两者混用会跨 CRT 传 `std::string` / `FILE*`，禁止用它链接 Qt。
+- **运行时 DLL 顺序**：`D:\MSYS2\ucrt64\bin` 在 `PATH` 上，若它排在 `D:\Qt\6.11.1\mingw_64\bin` 之前，
+  `CUTEE.exe` / 测试会加载 UCRT 版 `libstdc++` 配 msvcrt 版 Qt。`ctest --preset local-mingw` 已在 test preset 里
+  前置 Qt 的 `bin`；手动运行 exe 时同样保证 Qt 的 `bin` 在前（或使用 `windeployqt` 产出的目录）。
+- 本机固定路径可写进 `CMakeUserPresets.json`（已 gitignore），例如继承 `windows-mingw` 的 `local-mingw` 预设，
+  之后无需任何环境变量即可 `cmake --preset local-mingw` / `--build` / `ctest --preset local-mingw`。
 - 提交前必须保证：可构建（无警告）、`ctest` 全绿。
 
 ---

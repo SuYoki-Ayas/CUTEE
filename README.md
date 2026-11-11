@@ -42,12 +42,22 @@ ctest --test-dir build --output-on-failure
 ```powershell
 $env:QTDIR = 'D:\Qt\6.11.1\mingw_64'
 $env:MINGW_BIN = 'D:\Qt\Tools\mingw1310_64\bin'
-$env:NINJA_DIR = '<dir containing ninja.exe>'
+$env:NINJA_DIR = 'D:\msys2\ucrt64\bin'
 $env:PATH = "$env:QTDIR\bin;$env:MINGW_BIN;$env:PATH"
 cmake --preset windows-mingw
 cmake --build --preset windows-mingw
 ctest --test-dir build-mingw --output-on-failure
 ```
+
+> 构建工具（`cmake` / `ctest` / `ninja`）统一使用 MSYS2 的 UCRT64 版本（`pacman -S mingw-w64-ucrt-x86_64-cmake
+> mingw-w64-ucrt-x86_64-ninja`）。`ninja` 只按绝对路径引用，不要用它替代编译器：Qt 6.11 的 MinGW 构建基于
+> `msvcrt.dll`，编译器必须保持 Qt 自带的 MinGW 13.1，否则会在跨 CRT 传递 C++ 对象时出问题。
+>
+> 运行时注意 `PATH` 顺序：`D:\MSYS2\ucrt64\bin` 若排在 `D:\Qt\6.11.1\mingw_64\bin` 之前，exe 会加载 UCRT 版
+> `libstdc++`。`ctest --preset local-mingw` 已在 test preset 中前置 Qt 的 `bin`，手动运行 exe 时保持一致。
+>
+> 也可以把上面三个变量写进 `CMakeUserPresets.json`（已 gitignore）做成 `local-mingw` 预设，之后直接用
+> `cmake --preset local-mingw`、`cmake --build --preset local-mingw`、`ctest --preset local-mingw`。
 
 ## 数据目录
 
