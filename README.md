@@ -44,6 +44,15 @@ cmake --build --preset windows-msvc
 ctest --preset windows-msvc
 ```
 
+发布包：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\package.ps1
+```
+
+脚本构建 Release、用 `windeployqt` 收集 Qt 运行时（含 Qt Graphs 的 QML 模块与中文翻译），
+输出 `dist\CUTEE-<版本>-win64.zip`，解压即可运行，无需安装 Qt。
+
 ## 数据目录
 
 默认 Qt `AppDataLocation`（`%APPDATA%\CUTEE\CUTEE`），可用环境变量 `CUTEE_DATA_DIR` 覆盖：
