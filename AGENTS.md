@@ -277,3 +277,20 @@ ctest --test-dir build-mingw --output-on-failure
 - **图表**：使用 Qt Charts（`QChartView`），不引入 QML。数据由汇总工作线程返回的 `SummaryOutcome::records` 提供，`TrendChart::setData` 只在 UI 线程重建 series/坐标轴；颜色来自 `palette::kChart*`。Qt Charts 采用 GPLv3/商业许可，发行前需确认许可策略。
 - **学生信息与年级**：`student_profile` 只存 `stage` 与 `enrollment_year`，**年级永不入库**。任何需要显示年级的地方都调用 `core::resolveGrade(stage, enrollmentYear, QDate::currentDate()).label()`；不要自己写“当前年份 - 入学年份”的算术，也不要在数据库里缓存年级。侧栏用 `MainWindow::refreshStudentHeader()`：建档、保存档案、窗口 `showEvent` 时刷新，未建档时整块隐藏；目标院校显示为灰色小字“目标：…”，为空时隐藏该行（存于 `note` 列，界面字段名为“目标院校”）。学年切换点为 9 月 1 日（`kSchoolYearStartMonth`）。
 - **整库替换**：`DataMaintenance::importDatabaseFile()` 会 `close()` 再 `open()` 同一个 `Database` 对象，所以各页面持有的 `Database&` 引用依然有效；替换后必须由 `MainWindow::reloadAllPages()` 重新拉取数据（设置页发 `dataReplaced()`）。导入校验在**副本**上做，绝不迁移或改写用户选择的原始文件。
+
+---
+
+## 9. 手工验收清单
+
+改动涉及界面或数据操作时，按下表逐条自测（README 面向使用者，不再重复本节）：
+
+1. 启动：侧栏浅紫、当前页高亮、画布浅灰、表格白底，字体统一，无深色面板。
+2. 100% 与 150% 缩放（`QT_SCALE_FACTOR=1.5`）下无重叠或截断；最小尺寸 1024×680 时筛选栏不重叠。
+3. 成绩页：1000+ 条数据下滚动、表头排序、切换各类型/科目/日期/关键字筛选均即时响应且不重建页面；得分率 <60% 显示警示色。
+4. 新增/编辑成绩：清空考试名称或满分填 0 就地报错（红框 + 内联文字）；得分高于满分时弹一次确认。
+5. 科目页：类型/状态为彩色标签；被引用科目删除按钮禁用并提示只能停用；停用后新成绩不可选，历史成绩仍可编辑。
+6. 汇总页：切换全部时间/本学期/自定义后统计刷新、无数据时显示空状态；趋势图随科目与时间范围变化。
+7. 导出明细/汇总为 UTF-8 BOM CSV，Excel 打开中文不乱码。
+8. 档案页与设置页保存三态：灰 `已保存` → 浅绿 `保存修改` + `撤销更改` → `已保存` + `撤销修改`。
+9. 重启后窗口尺寸、最后页面、成绩表列显隐保持；侧栏姓名、年级、目标院校正确，目标为空时该行隐藏，未建档时整块隐藏。
+10. 导出 `.db` 可独立打开；导入需输入「导入」，覆盖后所有页面刷新且 `backups/` 留下快照；重置后档案/科目/成绩清空而 `settings` 与 schema 保留。
