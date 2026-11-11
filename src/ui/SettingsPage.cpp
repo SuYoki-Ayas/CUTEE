@@ -205,7 +205,7 @@ QWidget *SettingsPage::buildAboutSection()
     layout->setSpacing(8);
 
     layout->addWidget(ui::makeHintLabel(
-        QStringLiteral("CUTEE %1 是 Windows下 采用 Qt6 开发的 单机离线的成绩管理工具")
+        QStringLiteral("CUTEE %1 是 Windows下 采用 Qt6 开发的 成绩管理工具")
             .arg(QStringLiteral(CUTEE_VERSION)),
         group));
 

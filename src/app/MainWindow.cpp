@@ -168,7 +168,7 @@ QWidget *MainWindow::buildSidebar()
     m_nav->setAnimated(false);
     layout->addWidget(m_nav, 1);
 
-    auto *version = new QLabel(QStringLiteral("版本 %1 · 单机离线").arg(QStringLiteral(CUTEE_VERSION)),
+    auto *version = new QLabel(QStringLiteral("版本 %1\nDeveloped by SuYoki-Ayas").arg(QStringLiteral(CUTEE_VERSION)),
                                sidebar);
     version->setObjectName(QStringLiteral("sidebarMeta"));
     version->setContentsMargins(10, 0, 0, 0);
