@@ -10,7 +10,14 @@ CUTEE 是一个 **Windows 单机离线** 的 Qt Widgets 桌面工具，用于记
 
 > **平台支持**：仅 Windows 10/11 x64，短期内不考虑 Linux/macOS 移植。
 
+**可靠性验证完成的操作系统：**
+  - Windows11 24H2
+
+如果您在您的操作系统上验证了，请在 [**2**](https://github.com/SuYoki-Ayas/CUTEE/issues/2) 反馈。
+
 开发约定、文件职责与架构说明见 [AGENTS.md](AGENTS.md)。
+
+**最新版本：** Release V1.0.0
 
 ## 构建
 
