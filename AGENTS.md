@@ -3,6 +3,8 @@
 面向在本仓库工作的开发者与 AI 代理：说明**每个文件负责什么**、改动时必须遵守的约定，以及常见需求的落点。
 
 - 产品：Windows 单机离线、只维护**一位学生**的成绩管理工具。
+- 目标平台：**仅 Windows 10/11 x64**。短期内不考虑 Linux/macOS 移植，不要为此引入跨平台抽象层或条件编译；
+  涉及平台相关的改动（字体、路径、打包、CI）一律按 Windows 处理。
 - 技术栈：Qt 6.5+ Widgets（Fusion + 全局 QSS）、C++17、CMake、SQLite。
 - 不包含：多学生、在线作答、自动判分、代码测评、云同步、QML/WebEngine。
 
@@ -263,6 +265,7 @@ ctest --test-dir build-mingw --output-on-failure
 - 不要在没有二次确认的情况下执行删除、停用等破坏性操作。
 - 不要在界面里用 `QFile::copy` / `QFile::remove` 直接替换 `cutee.db`，也不要自己拼 `VACUUM INTO`；导入、导出、重置一律走 `storage/DataMaintenance`。
 - 不要在"导入/重置"这类整库级破坏性操作上用普通 `QMessageBox` 确认，必须用 `ui::confirmTyped()` 输入关键字。
+- 不要为 Linux/macOS 移植添加条件编译、跨平台抽象层或平台预设——短期只支持 Windows。
 
 ---
 
