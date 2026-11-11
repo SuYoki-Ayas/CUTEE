@@ -1,4 +1,4 @@
-﻿function(cutee_add_test name)
+function(cutee_add_test name)
     qt_add_executable(${name} ${ARGN})
     set_target_properties(${name} PROPERTIES WIN32_EXECUTABLE OFF)
     target_link_libraries(${name} PRIVATE cutee_core cutee_models Qt6::Test)
@@ -53,4 +53,5 @@ cutee_add_test(tst_trend_chart
     ${CMAKE_SOURCE_DIR}/src/ui/TrendChart.h
     ${CMAKE_SOURCE_DIR}/src/ui/UiKit.cpp
     ${CMAKE_SOURCE_DIR}/src/ui/UiKit.h)
-target_link_libraries(tst_trend_chart PRIVATE Qt6::Widgets Qt6::Charts)
+target_link_libraries(tst_trend_chart PRIVATE Qt6::Widgets Qt6::Graphs Qt6::QuickWidgets)
+

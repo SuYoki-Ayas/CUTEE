@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(CUTEE VERSION 0.2.0 LANGUAGES CXX)
+project(CUTEE VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,7 +10,7 @@ if(MSVC)
     add_compile_options(/utf-8 /permissive-)
 endif()
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Sql Concurrent Test Charts)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Sql Concurrent Test Graphs QuickWidgets)
 
 qt_standard_project_setup(REQUIRES 6.5)
 
@@ -113,7 +113,7 @@ qt_add_executable(CUTEE
 set_target_properties(CUTEE PROPERTIES
     WIN32_EXECUTABLE "$<NOT:$<CONFIG:Debug>>"
     AUTORCC ON)
-target_link_libraries(CUTEE PRIVATE cutee_core cutee_models Qt6::Widgets Qt6::Concurrent Qt6::Charts)
+target_link_libraries(CUTEE PRIVATE cutee_core cutee_models Qt6::Widgets Qt6::Concurrent Qt6::Graphs Qt6::QuickWidgets)
 
 option(CUTEE_BUILD_TESTS "Build the Qt Test suites" ON)
 if(CUTEE_BUILD_TESTS)

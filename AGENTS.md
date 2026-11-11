@@ -5,43 +5,50 @@
 - 产品：Windows 单机离线、只维护**一位学生**的成绩管理工具。
 - 目标平台：**仅 Windows 10/11 x64**。短期内不考虑 Linux/macOS 移植，不要为此引入跨平台抽象层或条件编译；
   涉及平台相关的改动（字体、路径、打包、CI）一律按 Windows 处理。
-- 技术栈：Qt 6.5+ Widgets（Fusion + 全局 QSS）、C++17、CMake、SQLite。
-- 不包含：多学生、在线作答、自动判分、代码测评、云同步、QML/WebEngine。
+- 技术栈：Qt 6.5+ Widgets（Fusion + 全局 QSS）、Qt Graphs（趋势图）、C++17、CMake、SQLite。
+- 不包含：多学生、在线作答、自动判分、代码测评、云同步、WebEngine。
+  QML **仅**用于 Qt Graphs 的趋势图（`QQuickWidget` 承载 `GraphsView`），其余页面一律纯 Widgets。
 
 ---
 
 ## 1. 构建 · 运行 · 测试
 
 ```powershell
-# MSVC（首选）
-$env:QTDIR = 'D:\Qt\6.11.1\msvc2022_64'
-cmake --preset windows-msvc
-cmake --build --preset windows-msvc
-ctest --test-dir build --output-on-failure
-
-# MinGW（验证构建；ctest 需要 Qt 在 PATH 中）
-$env:QTDIR = 'D:\Qt\6.11.1\mingw_64'
-$env:MINGW_BIN = 'D:\Qt\Tools\mingw1310_64\bin'
-$env:NINJA_DIR = 'D:\msys2\ucrt64\bin'
-$env:PATH = "$env:QTDIR\bin;$env:MINGW_BIN;$env:PATH"
-cmake --preset windows-mingw
-cmake --build --preset windows-mingw
-ctest --test-dir build-mingw --output-on-failure
+# 本机一条命令搞定（机器路径写在 gitignore 的 CMakeUserPresets.json）
+cmake --preset local-msvc
+cmake --build --preset local-msvc
+ctest --preset local-msvc
 ```
 
 - 便携/测试数据目录：设置环境变量 `CUTEE_DATA_DIR`。
-- 无 `QTDIR` 时 MSVC 预设无法配置；MinGW 预设还依赖 `MINGW_BIN`、`NINJA_DIR`。
-- **构建工具统一来自 MSYS2**：`cmake` / `ctest` / `cpack` / `ninja` 都取 `D:\MSYS2\ucrt64\bin`
-  （`pacman -S mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja`），不再使用 Python 目录下的 pip 版 cmake。
-  `ninja` 依赖同目录的 `libgcc_s_seh-1.dll` / `libstdc++-6.dll`，因此以**绝对路径**引用（`CMAKE_MAKE_PROGRAM`）。
-- **编译器仍用 Qt 自带的 MinGW 13.1**（`D:\Qt\Tools\mingw1310_64`）。Qt 6.11 的 `mingw_64` 二进制链接
-  `msvcrt.dll`，而 MSYS2 UCRT64 的 gcc 16 走 UCRT，两者混用会跨 CRT 传 `std::string` / `FILE*`，禁止用它链接 Qt。
-- **运行时 DLL 顺序**：`D:\MSYS2\ucrt64\bin` 在 `PATH` 上，若它排在 `D:\Qt\6.11.1\mingw_64\bin` 之前，
-  `CUTEE.exe` / 测试会加载 UCRT 版 `libstdc++` 配 msvcrt 版 Qt。`ctest --preset local-mingw` 已在 test preset 里
-  前置 Qt 的 `bin`；手动运行 exe 时同样保证 Qt 的 `bin` 在前（或使用 `windeployqt` 产出的目录）。
-- 本机固定路径可写进 `CMakeUserPresets.json`（已 gitignore），例如继承 `windows-mingw` 的 `local-mingw` 预设，
-  之后无需任何环境变量即可 `cmake --preset local-mingw` / `--build` / `ctest --preset local-mingw`。
+- **工具链组合：MSYS2 的 `cmake` / `ctest` / `ninja` + MSVC 的 `cl.exe`**，生成器为 Ninja。
+  `cmake` / `ninja` 取自 `D:\MSYS2\ucrt64\bin`（`pacman -S mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja`），
+  不再使用 Python 目录下的 pip 版 cmake。
+- **VS 2026 目前只装了部分组件**：`cl.exe` 与 Windows SDK 都在，但 `vcvars64.bat` 缺失、
+  `VsDevCmd.bat` 不设置 `INCLUDE`/`LIB`，`vswhere -requires ...VC.Tools.x86.x64` 也查不到工作负载，
+  所以 **`Visual Studio 18 2026` / `Visual Studio 17 2022` 生成器都用不了**。
+  `local-msvc` 预设因此直接写死 `PATH` / `INCLUDE` / `LIB`（MSVC 14.44.35207 + Windows SDK 10.0.28000.0）。
+  若重装/升级 VS，需要同步更新这三个变量与 `CMAKE_CXX_COMPILER`。
+- **Qt 版本随安装变化**：当前是 `D:\Qt\6.11.3\msvc2022_64`（已无 MinGW kit），且 **未安装 Qt Charts**；
+  趋势图使用 Qt Graphs（`Qt6::Graphs` + `Qt6::QuickWidgets`）。`local-msvc` 的 test preset 已把 Qt 的 `bin` 前置到 `PATH`。
 - 提交前必须保证：可构建（无警告）、`ctest` 全绿。
+
+---
+
+## 1.1 Qt Graphs 趋势图的约定
+
+Qt Graphs **没有 2D 的 C++ Widget 类**：`QtGraphsWidgets` 只有 3D（`Q3DScatterWidgetItem` 等），
+2D 的 `QGraphsView` 是 private 的 `QQuickItem`。因此 `TrendChart` 采用：
+
+- **QQuickWidget + 内联 QML**（`TrendChart.cpp` 中的 `kTrendChartQml` 字符串）：QML 只负责搭结构
+  （`GraphsView` + `DateTimeAxis` + `ValueAxis` + `LineSeries` + `ScatterSeries`，各自带 `objectName`）。
+- **数据与坐标范围由 C++ 推送**：`applyToChart()` 通过 `findChild` 拿到 `QDateTimeAxis`/`QValueAxis`/`QXYSeries`，
+  调用 `setMin`/`setMax`/`replace()`。不要在 QML 里挂数据绑定。
+- **组件懒加载**：`QQuickWidget` 在 `showEvent` 里才创建，所以 `QT_QPA_PLATFORM=offscreen` 的单测不会碰到
+  QML/RHI；测试改用 `TrendChart::currentPoints()` / `currentTitle()` 校验数据契约。
+- QQmlComponent 必须以 `QUrl()`（空 URL）调用 `setData`；传自定义 scheme（如 `inmemory:/x.qml`）会被当成远程资源
+  异步加载，`isReady()` 返回 false。
+- `QQuickWidget` 里 `QWidget::grab()` 会出现重影，验证渲染请用 `grabFramebuffer()`。
 
 ---
 
@@ -75,9 +82,9 @@ ctest --test-dir build-mingw --output-on-failure
 
 | 文件 | 职责 |
 | --- | --- |
-| `CMakeLists.txt` | 定义 `cutee_core`（基础层静态库）、`cutee_models`（表格模型，链 Gui）、`CUTEE` 可执行文件（`resources/cutee.qrc` + `AUTORCC ON`，链接 `Qt6::Charts`）、测试开关；MSVC 用 `/W4`，GCC 用 `-Wall -Wextra -Wpedantic`。 |
-| `CMakePresets.json` | `windows-msvc`（VS 2022，输出 `build/`）与 `windows-mingw`（Ninja，输出 `build-mingw/`）配置/构建/测试预设。 |
-| `README.md` | 面向用户的说明：功能、构建、数据目录、数据库与迁移、界面结构与配色、交互约定、手工验收清单、性能数据、已知限制、测试覆盖。 |
+| `CMakeLists.txt` | 定义 `cutee_core`（基础层静态库）、`cutee_models`（表格模型，链 Gui）、`CUTEE` 可执行文件（`resources/cutee.qrc` + `AUTORCC ON`，链接 `Qt6::Graphs` + `Qt6::QuickWidgets`）、测试开关；MSVC 用 `/W4`，GCC 用 `-Wall -Wextra -Wpedantic`。 |
+| `CMakePresets.json` | `windows-msvc`（Ninja + MSVC，输出 `build/`）配置/构建/测试预设；本机具体路径放在 gitignore 的 `CMakeUserPresets.json`（`local-msvc`）。 |
+| `README.md` | 面向用户的说明：功能、构建、数据目录、测试、许可证。 |
 | `AGENTS.md` | 本文件：文件职责索引 + 开发约定。 |
 | `.gitignore` | 忽略构建树（`build/`、`build-*/`）、IDE 状态、`*.log`、`CMakeUserPresets.json`。 |
 | `.gitattributes` | 统一换行符处理。 |
@@ -148,7 +155,7 @@ ctest --test-dir build-mingw --output-on-failure
 | `SubjectPage.h` / `SubjectPage.cpp` | 科目管理页：列表（彩色标签）、类型/停用筛选、增删改、排序移动、启用/停用、引用数统计、被引用科目禁用删除并提示。 |
 | `SubjectDialog.h` / `SubjectDialog.cpp` | 新增/编辑科目对话框：名称、类型（仅新建可选）、排序、启用、备注；类型创建后不可改的提示。 |
 | `SummaryPage.h` / `SummaryPage.cpp` | 成绩汇总页：时间范围筛选（全部/本学期/自定义）；页内 `QTabWidget` 分「汇总表」「成绩趋势」；统计在 `QtConcurrent` 工作线程执行（独立数据库连接），`QFutureWatcher` 回主线程；按科目与按类型两张表；平均得分率自绘条形（`RateBarDelegate`）；区分“无任何成绩”和“所选范围无成绩”；导出汇总 CSV。 |
-| `TrendChart.h` / `TrendChart.cpp` | Qt Charts 成绩趋势：科目下拉 + `QChartView`（`QLineSeries` + `QScatterSeries`，横轴日期、纵轴 0–100% 得分率）；数据由汇总线程一次取回，切换科目不查库；无数据时显示空状态。 |
+| `TrendChart.h` / `TrendChart.cpp` | Qt Graphs 成绩趋势：科目下拉 + `QQuickWidget` 承载 QML `GraphsView`（`DateTimeAxis` + `ValueAxis` + `LineSeries` + `ScatterSeries`，横轴日期、纵轴 0–100% 得分率）；数据由汇总线程一次取回，切换科目不查库；无数据时显示空状态。 |
 | `ProfilePage.h` / `ProfilePage.cpp` | 学生档案页：唯一档案的表单（姓名必填、所在学段 `profileStage`、入学年份 `profileEnrollmentYear` 微调框、目标院校 `profileGoal` 单行输入）；表单下方 `profileGradeHint` 用 `resolveGrade()` 实时显示推算年级；三态操作按钮——内容与库一致时显示灰色 `已保存`（禁用、隐藏撤销）、有改动时显示浅绿 `保存修改` + `撤销更改`、刚保存后显示灰色 `已保存` + `撤销修改`（回填保存前的值，需再次保存才落库）；首次引导横幅、就地校验、创建/更新时间提示。用 `textChanged` / `currentIndexChanged` / `valueChanged` + `m_updatingForm` 判断脏状态，保证中文输入法提交也能触发。 |
 | `SettingsPage.h` / `SettingsPage.cpp` | 设置页：数据目录/数据库/日志文件路径与打开按钮、日志级别保存（复用档案页的保存按钮三态约定）、**数据备份与恢复**（导出/导入 `.db`、重置数据，导入与重置走 `DangerConfirmDialog` 二级验证并自动备份）、关于与备份说明（含 schema 版本）。数据变更后发 `dataReplaced()`，由 `MainWindow` 刷新所有页面。 |
 | `LogPage.h` / `LogPage.cpp` | 日志页：只读等宽文本、手动刷新、可选 2 秒自动刷新（离开页面即停止）、打开日志目录。 |
@@ -165,7 +172,7 @@ ctest --test-dir build-mingw --output-on-failure
 | `tst_score_model.cpp` | 表格模型行列/表头、展示与对齐、前景色（<60% 警示、超满分错误色）、数值排序角色、proxy 筛选（类型/科目/关键字/日期）与排序、模型重置。 |
 | `tst_profile_page.cpp` | 档案页三态按钮：首次启动的建档按钮、无改动时灰色 `已保存` 且隐藏撤销、改动学段后浅绿 `保存修改` + `撤销更改`、保存后 `撤销修改` 回填保存前的值且不落库、撤销更改不写库、年级提示随学段变化、目标院校往返一致。注意 `QTest::keyClicks` 只支持 ASCII，中文输入用 `setText()`（同样触发 `textChanged`）。 |
 | `tst_settings_page.cpp` | 设置页三态按钮：默认灰色 `已保存` 且隐藏撤销、切换日志级别后浅绿 `保存设置` + `撤销更改`、保存后写库并切到 `撤销修改`、撤销修改回填上一级别但库中仍是新值、撤销更改不写库。 |
-| `tst_trend_chart.cpp` | 趋势图数据契约：每条记录生成一个折线/散点数据点、无数据时切到空状态并清空 series、切换数据后重建坐标轴。 |
+| `tst_trend_chart.cpp` | 趋势图数据契约：每条记录生成一个数据点、按日期排序、无数据时切到空状态、切换科目只换数据不重建页面。 |
 | `tst_data_maintenance.cpp` | 数据维护：导出快照可独立打开且内容一致（并允许覆盖已有导出）、拒绝非 SQLite / 非 CUTEE / schema 过新的导入文件、导入后活动库为新数据且留下导入前备份、不残留 `cutee-import-*` 临时文件、拒绝导入正在使用的库、重置清空三表但保留 `settings` 与 schema。 |
 | `tst_danger_dialog.cpp` | 二级验证窗口：确认按钮初始禁用、输入精确关键字后启用、首尾空格被忽略、错误关键字保持禁用、`isDefault` 随匹配状态在「取消」与确认按钮之间切换。 |
 
@@ -243,7 +250,7 @@ ctest --test-dir build-mingw --output-on-failure
 | 成绩表新增一列 | `ScoreTableModel`（`Column` 枚举 + `data` + `headerData` + `SortValueRole`）→ `ScorePage` 列宽/委托 → `tests/tst_score_model.cpp`；列显隐菜单会自动多出一项 |
 | 新增筛选条件 | `ScoreFilterProxyModel`（setter + `filterAcceptsRow`）→ `ScorePage::buildFilterBar/applyFilters` → 模型测试 |
 | 新增页面级快捷键 | `new QShortcut(seq, this)` 后**必须** `setContext(Qt::WidgetWithChildrenShortcut)`；表格内快捷键把 parent 设为表格并使用 `Qt::WidgetShortcut` |
-| 修改趋势图 | `TrendChart::updateChart()`（series/坐标轴在此重建）+ `tst_trend_chart.cpp`；颜色取 `palette::kChart*` |
+| 修改趋势图 | `TrendChart::updateChart()`（算点与标题）+ `applyToChart()`（推数据与坐标范围）+ `kTrendChartQml`（结构/主题）+ `tst_trend_chart.cpp`；颜色取 `palette::kChart*` |
 | 改表结构 | 在 `Migrations.cpp` **追加**新版本条目（不要改已有条目）→ 相关 Repository → `tst_database.cpp` |
 | 调整年级推算或档案字段 | `core/SchoolStage.{h,cpp}`（纯逻辑 + 单测）→ 如新增字段则追加迁移 → `StudentProfileRepository` → `ProfilePage` 表单 + `MainWindow::refreshStudentHeader()` |
 | 新增破坏性数据操作 | 用 `ui::confirmTyped()`（`DangerConfirmDialog`）做二级验证 → `storage/DataMaintenance` 里加纯逻辑函数 → `tst_data_maintenance.cpp`；界面只允许调用 maintenance，不直接动文件 |
@@ -260,7 +267,7 @@ ctest --test-dir build-mingw --output-on-failure
 - 不要用 `QTableWidget` 承载可能增长到千行的数据。
 - 不要修改已发布的迁移条目；只追加新版本。
 - 不要在 UI 线程做批量导入、复杂汇总等耗时工作。
-- 不要引入 QML/WebEngine/Electron 或大型第三方 UI 库。
+- 不要在 Qt Graphs 趋势图之外引入 QML，也不要引入 WebEngine/Electron 或大型第三方 UI 库。
 - 不要在页面级 `QShortcut` 使用默认的 `Qt::WindowShortcut`，否则多个页面同名快捷键会冲突。
 - 不要在没有二次确认的情况下执行删除、停用等破坏性操作。
 - 不要在界面里用 `QFile::copy` / `QFile::remove` 直接替换 `cutee.db`，也不要自己拼 `VACUUM INTO`；导入、导出、重置一律走 `storage/DataMaintenance`。
@@ -274,7 +281,7 @@ ctest --test-dir build-mingw --output-on-failure
 - **侧栏**：`QTreeWidget#navTree`。类别行（`makeGroup`）加粗、`Qt::ItemIsSelectable` 被移除，点击只切换展开状态；叶子行（`makeLeaf`）用 `Qt::UserRole` 存页面 id，`QStackedWidget` 索引由 `addPage()` 注册。新增页面时两处 id 必须一致。
 - **快捷键**：窗口级 `Ctrl+1…6` 在 `MainWindow::installShortcuts()` 注册；页面级快捷键见第 6 节。页面快捷键不要与窗口级冲突。
 - **列配置**：键名为 `settings::kScoreHiddenColumns`，值为隐藏列的索引（逗号分隔）。读取时只影响 `QHeaderView`，不要动模型数据；改动后立即写 `settings`。
-- **图表**：使用 Qt Charts（`QChartView`），不引入 QML。数据由汇总工作线程返回的 `SummaryOutcome::records` 提供，`TrendChart::setData` 只在 UI 线程重建 series/坐标轴；颜色来自 `palette::kChart*`。Qt Charts 采用 GPLv3/商业许可，发行前需确认许可策略。
+- **图表**：使用 Qt Graphs（`QQuickWidget` + QML `GraphsView`，见第 1.1 节）。数据由汇总工作线程返回的 `SummaryOutcome::records` 提供，`TrendChart::setData` 只在 UI 线程重算数据点并推给 QML；颜色来自 `palette::kChart*`。Qt Graphs 采用 GPLv3/商业双许可，发行前需确认许可策略。
 - **学生信息与年级**：`student_profile` 只存 `stage` 与 `enrollment_year`，**年级永不入库**。任何需要显示年级的地方都调用 `core::resolveGrade(stage, enrollmentYear, QDate::currentDate()).label()`；不要自己写“当前年份 - 入学年份”的算术，也不要在数据库里缓存年级。侧栏用 `MainWindow::refreshStudentHeader()`：建档、保存档案、窗口 `showEvent` 时刷新，未建档时整块隐藏；目标院校显示为灰色小字“目标：…”，为空时隐藏该行（存于 `note` 列，界面字段名为“目标院校”）。学年切换点为 9 月 1 日（`kSchoolYearStartMonth`）。
 - **整库替换**：`DataMaintenance::importDatabaseFile()` 会 `close()` 再 `open()` 同一个 `Database` 对象，所以各页面持有的 `Database&` 引用依然有效；替换后必须由 `MainWindow::reloadAllPages()` 重新拉取数据（设置页发 `dataReplaced()`）。导入校验在**副本**上做，绝不迁移或改写用户选择的原始文件。
 
